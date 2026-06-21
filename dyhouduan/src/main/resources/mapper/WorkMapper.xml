@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.dyhouduan.mapper.WorkMapper">
+
+    <resultMap id="WorkWithUserMap" type="com.example.dyhouduan.entity.Work">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="type" property="type"/>
+        <result column="url" property="url"/>
+        <result column="thumbnail" property="thumbnail"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="likes_count" property="likesCount"/>
+        <result column="comments_count" property="commentsCount"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+</mapper>
