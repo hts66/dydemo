@@ -19,7 +19,5 @@ public interface WorkService extends IService<Work> {
 
     List<Work> getHotWorks(int page, int size);
 
-    List<Work> getRecommendWorks(Long userId, int page, int size);
-
     void incrementViews(Long workId);
 }

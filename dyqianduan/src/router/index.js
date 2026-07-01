@@ -6,18 +6,11 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/recommend',
+      redirect: '/featured',
     },
     {
       path: '/recommend',
-      component: MainLayout,
-      children: [
-        {
-          path: '',
-          name: 'Recommend',
-          component: () => import('../views/Recommend.vue'),
-        },
-      ],
+      redirect: '/featured',
     },
     {
       path: '/featured',

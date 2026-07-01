@@ -7,16 +7,12 @@ import com.example.dyhouduan.entity.Work;
 import com.example.dyhouduan.mapper.LikeMapper;
 import com.example.dyhouduan.mapper.WorkMapper;
 import com.example.dyhouduan.service.WorkService;
-import com.example.dyhouduan.service.WatchHistoryService;
 import com.example.dyhouduan.utils.OssUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements WorkService {
@@ -26,9 +22,6 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
 
     @Autowired
     private OssUtil ossUtil;
-
-    @Autowired
-    private WatchHistoryService watchHistoryService;
 
     @Override
     public List<Work> getWorksWithUser(int page, int size) {
@@ -53,24 +46,6 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     public List<Work> getHotWorks(int page, int size) {
         int offset = (page - 1) * size;
         return baseMapper.selectHotWorks(offset, size);
-    }
-
-    @Override
-    public List<Work> getRecommendWorks(Long userId, int page, int size) {
-        int offset = (page - 1) * size;
-        List<Work> allHotWorks = baseMapper.selectHotWorks(offset, size * 2);
-        
-        if (userId != null) {
-            List<Long> watchedIds = watchHistoryService.getWatchedWorkIds(userId, 100);
-            Set<Long> watchedSet = watchedIds.stream().collect(Collectors.toSet());
-            
-            return allHotWorks.stream()
-                    .filter(work -> !watchedSet.contains(work.getId()))
-                    .limit(size)
-                    .collect(Collectors.toList());
-        }
-        
-        return allHotWorks.stream().limit(size).collect(Collectors.toList());
     }
 
     @Override
