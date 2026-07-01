@@ -16,20 +16,38 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration}")
-    private Long expiration;
+    @Value("${jwt.access-expiration}")
+    private Long accessExpiration;
+
+    @Value("${jwt.refresh-expiration}")
+    private Long refreshExpiration;
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(Long userId, String email) {
+    public String generateAccessToken(Long userId, String email) {
         Date now = new Date();
-        Date expirationDate = new Date(now.getTime() + expiration);
+        Date expirationDate = new Date(now.getTime() + accessExpiration);
 
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("email", email)
+                .claim("type", "access")
+                .issuedAt(now)
+                .expiration(expirationDate)
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    public String generateRefreshToken(Long userId, String email) {
+        Date now = new Date();
+        Date expirationDate = new Date(now.getTime() + refreshExpiration);
+
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("email", email)
+                .claim("type", "refresh")
                 .issuedAt(now)
                 .expiration(expirationDate)
                 .signWith(getSigningKey())

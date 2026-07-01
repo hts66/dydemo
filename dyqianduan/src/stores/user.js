@@ -4,6 +4,7 @@ import { login, register } from '../api/auth'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
+  const refreshToken = ref(localStorage.getItem('refreshToken') || '')
   const user = ref(null)
 
   const isLoggedIn = computed(() => !!token.value)
@@ -13,6 +14,11 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('token', newToken)
   }
 
+  const setRefreshToken = (newRefreshToken) => {
+    refreshToken.value = newRefreshToken
+    localStorage.setItem('refreshToken', newRefreshToken)
+  }
+
   const setUser = (newUser) => {
     user.value = newUser
     localStorage.setItem('user', JSON.stringify(newUser))
@@ -20,8 +26,10 @@ export const useUserStore = defineStore('user', () => {
 
   const logout = () => {
     token.value = ''
+    refreshToken.value = ''
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
     localStorage.removeItem('user')
   }
 
@@ -29,6 +37,7 @@ export const useUserStore = defineStore('user', () => {
     const result = await login(email, password)
     if (result.code === 200) {
       setToken(result.data.token)
+      setRefreshToken(result.data.refreshToken)
       setUser(result.data.user)
       return true
     }

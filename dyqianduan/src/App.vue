@@ -20,6 +20,11 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
+html, body, #app {
+  height: 100%;
+  width: 100%;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }

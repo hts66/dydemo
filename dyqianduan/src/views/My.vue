@@ -1,6 +1,7 @@
 <template>
   <div class="my-container">
     <div class="profile-header-section">
+      <button class="logout-btn" v-if="userStore.isLoggedIn" @click="handleLogout">退出登录</button>
       <div class="profile-info">
         <div class="avatar-wrapper" @click="openEditModal" v-if="userStore.isLoggedIn">
           <img :src="userStore.user?.avatar || defaultAvatar" class="avatar-img" />
@@ -42,30 +43,53 @@
       <div 
         class="tab-item" 
         :class="{ active: activeTab === 'works' }"
-        @click="activeTab = 'works'"
+        @click="handleTabClick('works')"
       >
         作品 {{ myWorks.length }}
       </div>
       <div 
         class="tab-item" 
         :class="{ active: activeTab === 'liked' }"
-        @click="activeTab = 'liked'"
+        @click="handleTabClick('liked')"
       >
         喜欢
       </div>
       <div 
         class="tab-item" 
         :class="{ active: activeTab === 'following' }"
-        @click="activeTab = 'following'"
+        @click="handleTabClick('following')"
       >
         关注
       </div>
       <div 
         class="tab-item" 
         :class="{ active: activeTab === 'followers' }"
-        @click="activeTab = 'followers'"
+        @click="handleTabClick('followers')"
       >
         粉丝
+      </div>
+      
+      <!-- 批量管理按钮 -->
+      <div class="tabs-right">
+        <template v-if="!isBatchMode">
+          <button 
+            v-if="activeTab === 'works' || activeTab === 'liked' || activeTab === 'following'" 
+            class="batch-btn"
+            @click="enterBatchMode"
+          >
+            批量管理
+          </button>
+        </template>
+        <template v-else>
+          <button class="batch-btn cancel" @click="exitBatchMode">取消</button>
+          <button 
+            class="batch-btn confirm" 
+            :disabled="selectedItems.length === 0"
+            @click="confirmBatchAction"
+          >
+            {{ getBatchActionText() }} ({{ selectedItems.length }})
+          </button>
+        </template>
       </div>
     </div>
 
@@ -77,8 +101,16 @@
           v-for="work in myWorks" 
           :key="work.id"
           class="work-card"
-          @click="openVideo(work)"
+          :class="{ 'batch-selected': isBatchMode && selectedItems.includes(work.id) }"
+          @click="handleWorkClick(work)"
         >
+          <input 
+            type="checkbox" 
+            v-if="isBatchMode" 
+            class="batch-checkbox"
+            :checked="selectedItems.includes(work.id)"
+            @click.stop="toggleSelectItem(work.id)"
+          />
           <div class="work-thumbnail">
             <img :src="work.thumbnail || work.url" />
             <div class="play-overlay">
@@ -97,9 +129,16 @@
             </div>
           </div>
         </div>
-        <div v-if="myWorks.length === 0" class="empty-state">
+        <div class="work-card upload-card" v-if="userStore.isLoggedIn" @click="$router.push('/upload')">
+          <div class="upload-placeholder">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="#555">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            <span class="upload-text">发布作品</span>
+          </div>
+        </div>
+        <div v-if="myWorks.length === 0 && !userStore.isLoggedIn" class="empty-state">
           <p>还没有发布作品</p>
-          <router-link to="/upload" class="upload-link">去发布第一个视频</router-link>
         </div>
       </div>
 
@@ -109,13 +148,32 @@
           v-for="work in likedWorks" 
           :key="work.id"
           class="work-card"
-          @click="openVideo(work)"
+          :class="{ 'batch-selected': isBatchMode && selectedItems.includes(work.id) }"
+          @click="handleWorkClick(work)"
         >
+          <input 
+            type="checkbox" 
+            v-if="isBatchMode" 
+            class="batch-checkbox"
+            :checked="selectedItems.includes(work.id)"
+            @click.stop="toggleSelectItem(work.id)"
+          />
           <div class="work-thumbnail">
             <img :src="work.thumbnail || work.url" />
+            <div class="play-overlay">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
           </div>
           <div class="work-info">
             <span class="work-title">{{ work.title || '无标题' }}</span>
+            <div class="work-stats">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="#fe2c55">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              {{ formatCount(work.likesCount) }}
+            </div>
           </div>
         </div>
         <div v-if="likedWorks.length === 0" class="empty-state">
@@ -125,13 +183,31 @@
 
       <!-- 关注 -->
       <div v-if="activeTab === 'following'" class="user-list">
-        <div v-for="user in followingList" :key="user.id" class="user-item">
+        <div 
+          v-for="user in followingList" 
+          :key="user.id" 
+          class="user-item"
+          :class="{ 'batch-selected': isBatchMode && selectedItems.includes(user.id) }"
+        >
+          <input 
+            type="checkbox" 
+            v-if="isBatchMode" 
+            class="batch-checkbox"
+            :checked="selectedItems.includes(user.id)"
+            @click.stop="toggleSelectItem(user.id)"
+          />
           <img :src="user.avatar || defaultAvatar" class="user-avatar" />
           <div class="user-info">
             <span class="user-name">{{ user.username || '匿名用户' }}</span>
             <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
           </div>
-          <button class="follow-btn following" @click="handleFollow(user.id)">已关注</button>
+          <button 
+            v-if="!isBatchMode"
+            class="follow-btn following" 
+            @click="handleFollow(user.id)"
+          >
+            已关注
+          </button>
         </div>
         <div v-if="followingList.length === 0" class="empty-state">
           <p>还没有关注任何人</p>
@@ -261,9 +337,10 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getWorks } from '../api/work'
+import { getWorks, deleteWork } from '../api/work'
 import { getFollowList, toggleFollow } from '../api/follow'
 import { uploadAvatar } from '../api/upload'
+import { getLikedWorks } from '../api/like'
 import request from '../utils/request'
 
 const router = useRouter()
@@ -280,6 +357,9 @@ const followerCount = ref(0)
 const worksCount = ref(0)
 const currentVideo = ref(null)
 const videoPlayer = ref(null)
+
+const isBatchMode = ref(false)
+const selectedItems = ref([])
 
 // 编辑资料弹窗
 const showEditModal = ref(false)
@@ -407,6 +487,18 @@ const loadFollowData = async () => {
   }
 }
 
+const loadLikedWorks = async () => {
+  if (!userStore.user) return
+  try {
+    const result = await getLikedWorks(userStore.user.id)
+    if (result.code === 200) {
+      likedWorks.value = result.data
+    }
+  } catch (err) {
+    console.error('加载点赞视频失败', err)
+  }
+}
+
 const openVideo = (work) => {
   currentVideo.value = work
   document.body.style.overflow = 'hidden'
@@ -438,10 +530,108 @@ const formatCount = (count) => {
   return count.toString()
 }
 
+const handleTabClick = (tab) => {
+  activeTab.value = tab
+  exitBatchMode()
+}
+
+const enterBatchMode = () => {
+  isBatchMode.value = true
+  selectedItems.value = []
+}
+
+const exitBatchMode = () => {
+  isBatchMode.value = false
+  selectedItems.value = []
+}
+
+const toggleSelectItem = (id) => {
+  const index = selectedItems.value.indexOf(id)
+  if (index > -1) {
+    selectedItems.value.splice(index, 1)
+  } else {
+    selectedItems.value.push(id)
+  }
+}
+
+const handleWorkClick = (work) => {
+  if (isBatchMode.value) {
+    toggleSelectItem(work.id)
+  } else {
+    openVideo(work)
+  }
+}
+
+const getBatchActionText = () => {
+  switch (activeTab.value) {
+    case 'works':
+      return '批量删除'
+    case 'liked':
+      return '批量取消点赞'
+    case 'following':
+      return '批量取消关注'
+    default:
+      return '确认'
+  }
+}
+
+const confirmBatchAction = async () => {
+  if (selectedItems.value.length === 0) return
+  
+  const confirmed = confirm(`确定要${getBatchActionText().replace('批量', '')}选中的${selectedItems.value.length}项吗？`)
+  if (!confirmed) return
+  
+  try {
+    switch (activeTab.value) {
+      case 'works':
+        for (const id of selectedItems.value) {
+          const result = await deleteWork(id)
+          if (result.code !== 200) {
+            throw new Error(result.message || '删除失败')
+          }
+        }
+        myWorks.value = myWorks.value.filter(w => !selectedItems.value.includes(w.id))
+        worksCount.value = myWorks.value.length
+        break
+      case 'liked':
+        for (const id of selectedItems.value) {
+          const result = await toggleLike(id)
+          if (result.code !== 200) {
+            throw new Error(result.message || '取消点赞失败')
+          }
+        }
+        likedWorks.value = likedWorks.value.filter(w => !selectedItems.value.includes(w.id))
+        break
+      case 'following':
+        for (const id of selectedItems.value) {
+          const result = await toggleFollow(id)
+          if (result.code !== 200) {
+            throw new Error(result.message || '取消关注失败')
+          }
+        }
+        followingList.value = followingList.value.filter(u => !selectedItems.value.includes(u.id))
+        followingCount.value = followingList.value.length
+        break
+    }
+    alert('操作成功')
+  } catch (err) {
+    console.error('批量操作失败', err)
+    alert('操作失败: ' + (err.message || '请重试'))
+  } finally {
+    exitBatchMode()
+  }
+}
+
+const handleLogout = () => {
+  userStore.logout()
+  router.push('/login')
+}
+
 onMounted(() => {
   if (userStore.isLoggedIn) {
     loadMyWorks()
     loadFollowData()
+    loadLikedWorks()
   }
 })
 </script>
@@ -456,6 +646,25 @@ onMounted(() => {
 .profile-header-section {
   padding: 40px 60px;
   background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  position: relative;
+}
+
+.logout-btn {
+  position: absolute;
+  top: 40px;
+  right: 60px;
+  padding: 8px 16px;
+  background: #fe2c55;
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.logout-btn:hover {
+  background: #e6204a;
 }
 
 .profile-info {
@@ -561,6 +770,8 @@ onMounted(() => {
   gap: 0;
   border-bottom: 1px solid #2a2a2a;
   padding: 0 60px;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .tab-item {
@@ -581,6 +792,46 @@ onMounted(() => {
   border-bottom-color: #fe2c55;
 }
 
+.tabs-right {
+  display: flex;
+  gap: 12px;
+}
+
+.batch-btn {
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.batch-btn {
+  background: #fe2c55;
+  color: #fff;
+}
+
+.batch-btn:hover {
+  background: #e6204a;
+}
+
+.batch-btn.cancel {
+  background: #3a3a3a;
+}
+
+.batch-btn.cancel:hover {
+  background: #4a4a4a;
+}
+
+.batch-btn.confirm {
+  background: #fe2c55;
+}
+
+.batch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Content */
 .tab-content {
   padding: 20px 60px;
@@ -598,10 +849,53 @@ onMounted(() => {
   overflow: hidden;
   cursor: pointer;
   transition: transform 0.2s;
+  position: relative;
 }
 
 .work-card:hover {
   transform: translateY(-4px);
+}
+
+.work-card.batch-selected {
+  border: 2px solid #fe2c55;
+}
+
+.batch-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+  z-index: 10;
+  cursor: pointer;
+  accent-color: #fe2c55;
+}
+
+.upload-card {
+  background: #2a2a2a;
+  border: 2px dashed #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-card:hover {
+  border-color: #fe2c55;
+  transform: translateY(-4px);
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+}
+
+.upload-text {
+  font-size: 13px;
 }
 
 .work-thumbnail {
@@ -669,6 +963,11 @@ onMounted(() => {
   padding: 12px;
   background: #2a2a2a;
   border-radius: 8px;
+  position: relative;
+}
+
+.user-item.batch-selected {
+  border: 2px solid #fe2c55;
 }
 
 .user-avatar {

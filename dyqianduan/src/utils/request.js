@@ -1,9 +1,23 @@
 import axios from 'axios'
 
 const request = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: '/api',
   timeout: 10000,
 })
+
+let isRefreshing = false
+let pendingRequests = []
+
+const processPendingRequests = (error) => {
+  pendingRequests.forEach((callback) => {
+    if (error) {
+      callback(error)
+    } else {
+      callback()
+    }
+  })
+  pendingRequests = []
+}
 
 request.interceptors.request.use(
   (config) => {
@@ -22,12 +36,66 @@ request.interceptors.response.use(
   (response) => {
     return response.data
   },
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const originalRequest = error.config
+
+    if (error.response?.status === 403) {
       localStorage.removeItem('token')
+      localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
       window.location.href = '/login'
+      return Promise.reject(error)
     }
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          pendingRequests.push((err) => {
+            if (err) {
+              reject(err)
+            } else {
+              resolve(request(originalRequest))
+            }
+          })
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        const refreshToken = localStorage.getItem('refreshToken')
+        if (!refreshToken) {
+          throw new Error('没有刷新令牌')
+        }
+
+        const response = await request.post('/auth/refresh', { refreshToken })
+        
+        if (response.code === 200) {
+          localStorage.setItem('token', response.data.token)
+          localStorage.setItem('refreshToken', response.data.refreshToken)
+          
+          originalRequest.headers.Authorization = `Bearer ${response.data.token}`
+          
+          processPendingRequests()
+          return request(originalRequest)
+        } else {
+          throw new Error(response.message)
+        }
+      } catch (err) {
+        processPendingRequests(err)
+        
+        localStorage.removeItem('token')
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        
+        return Promise.reject(err)
+      } finally {
+        isRefreshing = false
+      }
+    }
+
     return Promise.reject(error)
   }
 )

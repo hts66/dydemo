@@ -11,3 +11,7 @@ export const checkIsFollowing = (followeeId) => {
 export const getFollowList = (userId) => {
   return request.get(`/follows/list/${userId}`)
 }
+
+export const getFollowingWorks = (userId) => {
+  return request.get(`/works/following/${userId}`)
+}

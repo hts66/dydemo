@@ -7,6 +7,7 @@ export const uploadAvatar = (file) => {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    timeout: 60000,
   })
 }
 
@@ -17,6 +18,7 @@ export const uploadImage = (file) => {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    timeout: 60000,
   })
 }
 
@@ -26,6 +28,15 @@ export const uploadVideo = (file) => {
   return request.post('/upload/video', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
+    },
+    timeout: 120000,
+  })
+}
+
+export const cleanupFiles = (urls) => {
+  return request.post('/upload/cleanup', urls, {
+    headers: {
+      'Content-Type': 'application/json',
     },
   })
 }

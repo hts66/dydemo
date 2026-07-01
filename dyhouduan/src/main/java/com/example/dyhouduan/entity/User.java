@@ -27,6 +27,10 @@ public class User {
 
     private String avatar;
 
+    private Integer followersCount;
+
+    private Integer followingCount;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

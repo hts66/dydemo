@@ -24,3 +24,28 @@ export const publishWork = (data) => {
 export const deleteWork = (id) => {
   return request.delete(`/works/${id}`)
 }
+
+// 获取朋友视频列表
+export const getFriendsWorks = (userId) => {
+  return request.get(`/works/friends/${userId}`)
+}
+
+// 获取关注用户视频列表
+export const getFollowingWorks = (userId) => {
+  return request.get(`/works/following/${userId}`)
+}
+
+// 获取推荐视频列表
+export const getRecommendWorks = (page = 1, size = 10) => {
+  return request.get(`/works/recommend?page=${page}&size=${size}`)
+}
+
+// 获取热门视频列表
+export const getHotWorks = (page = 1, size = 10) => {
+  return request.get(`/works/hot?page=${page}&size=${size}`)
+}
+
+// 记录观看历史
+export const recordWatchHistory = (data) => {
+  return request.post('/works/watch', data)
+}

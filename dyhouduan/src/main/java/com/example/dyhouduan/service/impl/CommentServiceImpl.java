@@ -1,5 +1,6 @@
 package com.example.dyhouduan.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.dyhouduan.entity.Comment;
 import com.example.dyhouduan.entity.Work;
@@ -32,11 +33,10 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         comment.setContent(content);
         boolean success = save(comment);
         if (success) {
-            Work work = workMapper.selectById(workId);
-            if (work != null) {
-                work.setCommentsCount(work.getCommentsCount() + 1);
-                workMapper.updateById(work);
-            }
+            LambdaUpdateWrapper<Work> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(Work::getId, workId)
+                         .setSql("comments_count = comments_count + 1");
+            workMapper.update(null, updateWrapper);
         }
         return success;
     }

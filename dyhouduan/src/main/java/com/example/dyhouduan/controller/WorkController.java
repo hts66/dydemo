@@ -2,14 +2,18 @@ package com.example.dyhouduan.controller;
 
 import com.example.dyhouduan.dto.Response;
 import com.example.dyhouduan.entity.Work;
+import com.example.dyhouduan.service.FollowService;
 import com.example.dyhouduan.service.WorkService;
+import com.example.dyhouduan.service.WatchHistoryService;
 import com.example.dyhouduan.utils.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -20,7 +24,13 @@ public class WorkController {
     private WorkService workService;
 
     @Autowired
+    private FollowService followService;
+
+    @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private WatchHistoryService watchHistoryService;
 
     /**
      * 获取视频列表（分页）
@@ -70,6 +80,50 @@ public class WorkController {
     }
 
     /**
+     * 获取朋友视频列表
+     */
+    @GetMapping("/friends/{userId}")
+    public Response<List<Work>> getFriendsWorks(@PathVariable Long userId) {
+        try {
+            List<Map<String, Object>> friends = followService.getMutualFriends(userId);
+            if (friends.isEmpty()) {
+                return Response.success(new ArrayList<>());
+            }
+            List<Long> friendIds = new ArrayList<>();
+            for (Map<String, Object> friend : friends) {
+                friendIds.add(((Number) friend.get("id")).longValue());
+            }
+            List<Work> works = workService.getWorksByUserIds(friendIds);
+            return Response.success(works);
+        } catch (Exception e) {
+            log.error("获取朋友视频失败", e);
+            return Response.error("获取朋友视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取关注用户视频列表
+     */
+    @GetMapping("/following/{userId}")
+    public Response<List<Work>> getFollowingWorks(@PathVariable Long userId) {
+        try {
+            List<Map<String, Object>> following = followService.getFollowingList(userId);
+            if (following.isEmpty()) {
+                return Response.success(new ArrayList<>());
+            }
+            List<Long> followingIds = new ArrayList<>();
+            for (Map<String, Object> user : following) {
+                followingIds.add(((Number) user.get("id")).longValue());
+            }
+            List<Work> works = workService.getWorksByUserIds(followingIds);
+            return Response.success(works);
+        } catch (Exception e) {
+            log.error("获取关注视频失败", e);
+            return Response.error("获取关注视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 发布视频
      */
     @PostMapping
@@ -109,7 +163,7 @@ public class WorkController {
             if (!work.getUserId().equals(userId)) {
                 return Response.error(403, "无权删除");
             }
-            boolean success = workService.removeById(id);
+            boolean success = workService.deleteWorkWithLikes(id);
             if (success) {
                 return Response.success("删除成功", null);
             }
@@ -131,5 +185,62 @@ public class WorkController {
             }
         }
         return null;
+    }
+
+    /**
+     * 获取推荐视频列表
+     */
+    @GetMapping("/recommend")
+    public Response<List<Work>> getRecommendWorks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
+        try {
+            Long userId = getUserIdFromToken(request);
+            List<Work> works = workService.getRecommendWorks(userId, page, size);
+            return Response.success(works);
+        } catch (Exception e) {
+            log.error("获取推荐视频失败", e);
+            return Response.error("获取推荐视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取热门视频列表
+     */
+    @GetMapping("/hot")
+    public Response<List<Work>> getHotWorks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        try {
+            List<Work> works = workService.getHotWorks(page, size);
+            return Response.success(works);
+        } catch (Exception e) {
+            log.error("获取热门视频失败", e);
+            return Response.error("获取热门视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 记录观看历史
+     */
+    @PostMapping("/watch")
+    public Response<String> recordWatchHistory(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            Long userId = getUserIdFromToken(request);
+            if (userId == null) {
+                return Response.success("未登录，跳过记录");
+            }
+            Long workId = ((Number) body.get("workId")).longValue();
+            Integer watchDuration = body.get("watchDuration") != null ? ((Number) body.get("watchDuration")).intValue() : 0;
+            Boolean isComplete = body.get("isComplete") != null ? (Boolean) body.get("isComplete") : false;
+            
+            workService.incrementViews(workId);
+            watchHistoryService.saveWatchHistory(userId, workId, watchDuration, isComplete);
+            return Response.success("记录成功");
+        } catch (Exception e) {
+            log.error("记录观看历史失败", e);
+            return Response.error("记录观看历史失败: " + e.getMessage());
+        }
     }
 }

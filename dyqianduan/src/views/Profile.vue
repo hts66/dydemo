@@ -21,13 +21,13 @@
         <div class="avatar-section">
           <div class="avatar-wrapper" @click="triggerUpload">
             <img 
-              :src="userStore.user?.avatar || defaultAvatar" 
+              :src="pendingAvatarUrl || userStore.user?.avatar || defaultAvatar" 
               alt="头像" 
               class="avatar-img"
             />
             <div class="avatar-overlay">
               <span class="upload-icon">📷</span>
-              <span class="upload-text">点击更换头像</span>
+              <span class="upload-text">{{ pendingAvatarUrl ? '更换头像' : '点击更换头像' }}</span>
             </div>
           </div>
           <input 
@@ -37,6 +37,9 @@
             @change="handleFileChange" 
             class="hidden-input"
           />
+          <div v-if="pendingAvatarUrl" class="avatar-actions">
+            <button class="cancel-avatar-btn" @click="cancelAvatarChange">取消</button>
+          </div>
         </div>
 
         <div class="stats-section">
@@ -149,10 +152,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { uploadAvatar } from '../api/upload'
+import { uploadAvatar, cleanupFiles } from '../api/upload'
 import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
 
 const router = useRouter()
@@ -170,6 +173,9 @@ const showFollowModal = ref(false)
 const followModalTitle = ref('')
 const followList = ref([])
 
+const pendingAvatarFile = ref(null)
+const pendingAvatarUrl = ref('')
+
 const form = reactive({
   email: '',
   username: '',
@@ -184,6 +190,20 @@ onMounted(() => {
     form.gender = userStore.user.gender || 0
     form.bio = userStore.user.bio || ''
     loadFollowCounts()
+  }
+})
+
+onUnmounted(() => {
+  if (pendingAvatarUrl.value) {
+    URL.revokeObjectURL(pendingAvatarUrl.value)
+  }
+})
+
+onBeforeRouteLeave(() => {
+  if (pendingAvatarUrl.value) {
+    URL.revokeObjectURL(pendingAvatarUrl.value)
+    pendingAvatarUrl.value = ''
+    pendingAvatarFile.value = null
   }
 })
 
@@ -257,7 +277,7 @@ const triggerUpload = () => {
   fileInput.value.click()
 }
 
-const handleFileChange = async (event) => {
+const handleFileChange = (event) => {
   const file = event.target.files[0]
   if (!file) return
 
@@ -273,36 +293,31 @@ const handleFileChange = async (event) => {
 
   errorMessage.value = ''
   successMessage.value = ''
-  saving.value = true
 
-  try {
-    console.log('开始上传头像...', file.name, file.size)
-    const result = await uploadAvatar(file)
-    console.log('上传结果:', result)
-    if (result.code === 200) {
-      const newAvatar = result.data
-      userStore.setUser({
-        ...userStore.user,
-        avatar: newAvatar,
-      })
-      successMessage.value = '头像上传成功'
-      setTimeout(() => {
-        successMessage.value = ''
-      }, 3000)
-    } else {
-      errorMessage.value = result.message || '上传失败'
-    }
-  } catch (err) {
-    console.error('上传失败:', err)
-    errorMessage.value = '上传失败: ' + (err.message || '请检查后端是否启动')
-  } finally {
-    saving.value = false
+  if (pendingAvatarUrl.value) {
+    URL.revokeObjectURL(pendingAvatarUrl.value)
   }
+
+  pendingAvatarFile.value = file
+  pendingAvatarUrl.value = URL.createObjectURL(file)
+
+  successMessage.value = '头像已选择，请点击保存修改确认'
+  setTimeout(() => {
+    successMessage.value = ''
+  }, 3000)
 
   event.target.value = ''
 }
 
-const handleSave = () => {
+const cancelAvatarChange = () => {
+  if (pendingAvatarUrl.value) {
+    URL.revokeObjectURL(pendingAvatarUrl.value)
+    pendingAvatarUrl.value = ''
+    pendingAvatarFile.value = null
+  }
+}
+
+const handleSave = async () => {
   successMessage.value = ''
   errorMessage.value = ''
   
@@ -311,17 +326,55 @@ const handleSave = () => {
     return
   }
 
-  userStore.setUser({
-    ...userStore.user,
-    username: form.username,
-    gender: form.gender,
-    bio: form.bio,
-  })
+  saving.value = true
 
-  successMessage.value = '保存成功'
-  setTimeout(() => {
-    successMessage.value = ''
-  }, 3000)
+  try {
+    const updateData = {
+      ...userStore.user,
+      username: form.username,
+      gender: form.gender,
+      bio: form.bio,
+    }
+
+    if (pendingAvatarFile.value) {
+      console.log('开始上传头像到阿里云...', pendingAvatarFile.value.name)
+      const result = await uploadAvatar(pendingAvatarFile.value)
+      console.log('上传结果:', result)
+      
+      if (result.code === 200) {
+        const oldAvatar = userStore.user?.avatar
+        const newAvatar = result.data
+        updateData.avatar = newAvatar
+
+        if (oldAvatar && oldAvatar !== newAvatar) {
+          try {
+            await cleanupFiles([oldAvatar])
+            console.log('已删除旧头像:', oldAvatar)
+          } catch (err) {
+            console.error('删除旧头像失败:', err)
+          }
+        }
+
+        URL.revokeObjectURL(pendingAvatarUrl.value)
+        pendingAvatarUrl.value = ''
+        pendingAvatarFile.value = null
+      } else {
+        errorMessage.value = result.message || '头像上传失败'
+        return
+      }
+    }
+
+    userStore.setUser(updateData)
+
+    successMessage.value = '保存成功'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+  } catch (err) {
+    errorMessage.value = '保存失败: ' + (err.message || '未知错误')
+  } finally {
+    saving.value = false
+  }
 }
 
 const handleLogout = () => {
@@ -486,6 +539,29 @@ const handleLogout = () => {
 
 .hidden-input {
   display: none;
+}
+
+.avatar-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+  gap: 12px;
+}
+
+.cancel-avatar-btn {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  color: #666;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.cancel-avatar-btn:hover {
+  background: #e0e0e0;
+  color: #333;
 }
 
 .stats-section {

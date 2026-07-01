@@ -3,61 +3,42 @@
     <div class="video-wrapper" @touchstart="handleTouchStart" @touchmove="handleTouchMove" @touchend="handleTouchEnd" @wheel="handleWheel">
       <div
         v-for="(work, index) in works"
-        :key="work.id + '-' + (work.url || '')"
+        :key="work.id"
         class="video-slide"
         :style="{ transform: getSlideTransform(index) }"
       >
         <div class="video-content">
-          <video
-            :ref="el => { if (!isUnmounted.value) { if (el) videoRefs.value[index] = el; else delete videoRefs.value[index] } }"
-            :src="getProxyUrl(work.url)"
-            :poster="getProxyUrl(work.thumbnail)"
-            class="slide-video"
-            preload="auto"
-            autoplay
-            loop
-            playsinline
-            webkit-playsinline
-            x5-playsinline
-            muted
-            crossorigin="anonymous"
-            @loadstart="onVideoLoadStart(index)"
-            @play="onVideoPlay(index)"
-            @pause="onVideoPause(index)"
-            @loadeddata="onVideoLoaded(index)"
-            @canplay="onVideoCanPlay(index)"
-            @error="onVideoError(index)"
-            @loadedmetadata="onVideoLoaded(index)"
-          ></video>
-
-          <div v-if="index === currentIndex && !videoLoaded[index] && !videoError[index]" class="loading-overlay">
+          <div v-if="videoLoading[index] && !videoLoaded[index]" class="video-loading">
             <div class="loading-spinner"></div>
-            <p class="loading-text">正在加载视频...</p>
+            <span class="loading-text">加载中...</span>
           </div>
+          <img 
+            v-if="!videoLoaded[index]" 
+            :src="work.thumbnail || work.url.replace('/videos/', '/images/').replace('.mp4', '.jpg')" 
+            class="video-placeholder"
+          />
+          <video
+          :ref="el => setVideoRef(el, index)"
+          :src="getProxyUrl(work.url)"
+          class="slide-video"
+          loop
+          playsinline
+          webkit-playsinline
+          x5-playsinline
+          muted
+          preload="auto"
+          @loadstart="onVideoLoadStart(index)"
+          @loadedmetadata="onVideoLoaded(index)"
+          @error="onVideoError(index)"
+          @play="isPlaying[index] = true"
+          @pause="isPlaying[index] = false"
+        ></video>
 
-          <!-- 视频加载失败 -->
-          <div v-if="videoError[index]" class="video-error" @click.stop="retryVideo(index)">
-            <p>你的网络不好，加载失败</p>
-            <button>点击重试</button>
-          </div>
+          <div class="video-overlay" @click="togglePlay(index)"></div>
 
-          <!-- 点击播放/暂停的覆盖层 -->
-          <div class="video-overlay" @click.stop="togglePlay(index)"></div>
-
-          <!-- 暂停图标 -->
-          <div v-if="isPaused[index] && videoLoaded[index]" class="pause-icon" @click.stop="togglePlay(index)">
+          <div v-if="!isPlaying[index] && videoLoaded[index]" class="pause-icon" @click.stop="togglePlay(index)">
             <svg viewBox="0 0 24 24" width="64" height="64" fill="#fff">
               <path d="M8 5v14l11-7z"/>
-            </svg>
-          </div>
-
-          <!-- 声音控制 -->
-          <div class="sound-control" @click.stop="toggleMute(index)">
-            <svg v-if="videoMuted[index]" viewBox="0 0 24 24" width="24" height="24" fill="#fff">
-              <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.54 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.58-1.42 1.07-2.25 1.51v2.21c1.51-.51 2.87-1.33 4-2.43L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" width="24" height="24" fill="#fff">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
             </svg>
           </div>
 
@@ -75,7 +56,7 @@
 
         <div class="right-actions">
           <button class="follow-btn" :class="{ followed: work.isFollowing }" @click.stop="handleFollow(work)">
-            <img :src="work.avatar || defaultAvatar" @click.stop="goToProfile(work)" />
+            <img :src="work.avatar || defaultAvatar" />
             <svg v-if="work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
@@ -148,14 +129,18 @@
         </div>
       </div>
     </div>
+
+    <div v-if="works.length === 0 && !isLoading" class="empty-state">
+      <p>你的朋友很内向，还没有发表作品，去催催他们吧</p>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getWorks, getRecommendWorks, recordWatchHistory } from '../api/work'
+import { getFriendsWorks } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { toggleFollow, checkIsFollowing } from '../api/follow'
@@ -166,12 +151,10 @@ const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726
 
 const works = ref([])
 const videoRefs = ref({})
-const currentIndex = ref(0)
+const isPlaying = ref({})
 const videoLoaded = ref({})
 const videoLoading = ref({})
-const isPaused = ref({})
-const videoMuted = ref({})
-const videoError = ref({})
+const currentIndex = ref(0)
 const showComments = ref(false)
 const currentWork = ref(null)
 const comments = ref([])
@@ -179,9 +162,7 @@ const commentInput = ref('')
 const isLoading = ref(false)
 const isAnimating = ref(false)
 const offsetY = ref(0)
-const hasUserInteracted = ref(false)
 const isUnmounted = ref(false)
-const watchStartTime = ref({})
 
 let touchStartY = 0
 let touchStartX = 0
@@ -190,6 +171,12 @@ let isDragging = false
 let wheelTimeout = null
 let animationFrameId = null
 
+const setVideoRef = (el, index) => {
+  if (el) {
+    videoRefs.value[index] = el
+  }
+}
+
 const getSlideTransform = (index) => {
   const distance = (index - currentIndex.value) * window.innerHeight - offsetY.value
   return `translateY(${distance}px)`
@@ -197,252 +184,122 @@ const getSlideTransform = (index) => {
 
 const getProxyUrl = (url) => {
   if (!url) return ''
-  if (url.startsWith('/api/video/proxy?url=') || url.startsWith('/uploads/') || url.startsWith('/api/')) {
-    return url
-  }
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return `/api/video/proxy?url=${encodeURIComponent(url)}`
   }
   return url
 }
 
-const onVideoLoadStart = (index) => {
-  videoLoading.value[index] = true
-  videoError.value[index] = false
-}
-
-watch(currentIndex, async (newIndex, oldIndex) => {
-  const previousVideo = videoRefs.value[oldIndex]
-  if (previousVideo && !previousVideo.paused) {
-    previousVideo.pause()
-  }
-  await nextTick()
-  playCurrentVideo()
-})
-
 const loadWorks = async () => {
-  if (isLoading.value) {
-    console.log('[loadWorks] 已经在加载中，跳过')
-    return
-  }
+  if (isLoading.value) return
   isLoading.value = true
-  console.log('[loadWorks] 开始加载视频列表')
   try {
-    const page = Math.ceil(works.value.length / 10) + 1
-    console.log('[loadWorks] 加载第', page, '页')
-    const result = await getRecommendWorks(page, 10)
-    console.log('[loadWorks] API返回:', result.code, '数据数量:', result.data?.length)
+    const userId = userStore.user?.id || 1
+    const result = await getFriendsWorks(userId)
     if (result.code === 200 && result.data.length > 0) {
       const newWorks = []
       for (const work of result.data) {
-        console.log('[loadWorks] 视频数据:', work.id, work.url, work.thumbnail, work.username)
         const newWork = { ...work }
         newWork.userId = newWork.userId || newWork.user_id
         newWork.likesCount = newWork.likesCount || newWork.likes_count || 0
         newWork.commentsCount = newWork.commentsCount || newWork.comments_count || 0
         newWork.createdAt = newWork.createdAt || newWork.created_at
         newWork.isLiked = false
-        newWork.isFollowing = false
+        newWork.isFollowing = true
         try {
           const likeResult = await checkIsLiked(newWork.id)
           if (likeResult.code === 200) newWork.isLiked = likeResult.data
         } catch (e) {}
-        try {
-          const followResult = await checkIsFollowing(newWork.userId)
-          if (followResult.code === 200) newWork.isFollowing = followResult.data
-        } catch (e) {}
         newWorks.push(newWork)
       }
-      const startIndex = works.value.length
-      console.log('[loadWorks] 新视频起始索引:', startIndex, '数量:', newWorks.length)
       works.value.push(...newWorks)
-      for (let i = 0; i < newWorks.length; i++) {
-        videoLoaded.value[startIndex + i] = false
-        videoLoading.value[startIndex + i] = false
-        isPaused.value[startIndex + i] = true
-        videoMuted.value[startIndex + i] = true
-        videoError.value[startIndex + i] = false
-      }
       if (works.value.length === newWorks.length) {
-        console.log('[loadWorks] 首次加载，等待DOM更新后播放')
         await nextTick()
-        setTimeout(() => {
-          console.log('[loadWorks] 延迟播放当前视频')
-          console.log('[loadWorks] videoRefs:', Object.keys(videoRefs.value))
-          playCurrentVideo()
-        }, 300)
+        playCurrentVideo()
       }
     }
   } catch (err) {
-    console.error('[loadWorks] 加载视频失败:', err)
+    console.error('加载视频失败', err)
   } finally {
     isLoading.value = false
-    console.log('[loadWorks] 加载完成')
+  }
+}
+
+const playCurrentVideo = async () => {
+  await nextTick()
+  Object.keys(videoRefs.value).forEach(key => {
+    const idx = parseInt(key)
+    const v = videoRefs.value[key]
+    if (v && key !== currentIndex.value.toString()) {
+      v.pause()
+      isPlaying.value[idx] = false
+    }
+  })
+  const video = videoRefs.value[currentIndex.value]
+  if (video) {
+    video.muted = true
+    if (video.readyState >= 2) {
+      video.play().then(() => {
+        isPlaying.value[currentIndex.value] = true
+        videoLoading.value[currentIndex.value] = false
+      }).catch(e => {
+        console.error('播放失败:', e)
+        videoLoading.value[currentIndex.value] = false
+      })
+      isPlaying.value[currentIndex.value] = true
+    } else {
+      videoLoading.value[currentIndex.value] = true
+      video.addEventListener('loadedmetadata', () => {
+        video.play().then(() => {
+          isPlaying.value[currentIndex.value] = true
+          videoLoading.value[currentIndex.value] = false
+        }).catch(e => {
+          console.error('播放失败:', e)
+          videoLoading.value[currentIndex.value] = false
+        })
+        isPlaying.value[currentIndex.value] = true
+      }, { once: true })
+      video.addEventListener('error', () => {
+        videoLoading.value[currentIndex.value] = false
+      }, { once: true })
+    }
   }
 }
 
 const onVideoLoaded = (index) => {
-  console.log('[onVideoLoaded] 视频索引:', index, '当前索引:', currentIndex.value)
   videoLoaded.value[index] = true
   videoLoading.value[index] = false
-  videoError.value[index] = false
-}
-
-const onVideoCanPlay = (index) => {
-  console.log('[onVideoCanPlay] 视频索引:', index, '当前索引:', currentIndex.value)
-  videoLoaded.value[index] = true
-  videoLoading.value[index] = false
-  videoError.value[index] = false
-  
   if (index === currentIndex.value) {
-    console.log('[onVideoCanPlay] 当前视频可以播放，开始播放')
-    setTimeout(() => {
-      playCurrentVideo()
-    }, 100)
+    const video = videoRefs.value[index]
+    if (video) {
+      video.muted = true
+      video.play().then(() => {
+        isPlaying.value[index] = true
+      }).catch(e => console.error('视频自动播放失败:', e))
+      isPlaying.value[index] = true
+    }
   }
-}
-
-const onVideoPlay = (index) => {
-  isPaused.value[index] = false
-  watchStartTime.value[index] = Date.now()
-  const video = videoRefs.value[index]
-  if (video) {
-    video.removeAttribute('poster')
-    console.log('[onVideoPlay] 视频开始播放 - 索引:', index, 
-      'duration:', video.duration, 
-      'currentTime:', video.currentTime, 
-      'readyState:', video.readyState)
-  }
-}
-
-const onVideoPause = (index) => {
-  console.log('[onVideoPause] 视频索引:', index)
-  isPaused.value[index] = true
 }
 
 const onVideoError = (index) => {
-  console.error('[onVideoError] 视频索引:', index, '当前索引:', currentIndex.value)
-  videoError.value[index] = true
-  videoLoaded.value[index] = false
   videoLoading.value[index] = false
+  console.error('视频加载失败:', index)
 }
 
-const handleCoverError = (index) => {
-  const coverImg = document.querySelector(`.video-cover:nth-child(${index + 2}) img`)
-  if (coverImg) {
-    coverImg.style.display = 'none'
-  }
-}
-
-const retryVideo = async (index) => {
-  console.log('[retryVideo] 重试视频索引:', index)
-  videoError.value[index] = false
+const onVideoLoadStart = (index) => {
   videoLoading.value[index] = true
-  const video = videoRefs.value[index]
-  if (video) {
-    video.load()
-    try {
-      await video.play()
-      isPaused.value[index] = false
-      videoLoading.value[index] = false
-    } catch (err) {
-      console.warn('[retryVideo] 重试播放失败，等待 load 事件', err)
-    }
-  }
-}
-
-const waitForVideoElement = async (index, retries = 5) => {
-  for (let attempt = 0; attempt < retries; attempt++) {
-    await nextTick()
-    const video = videoRefs.value[index]
-    if (video) return video
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
-  return null
-}
-
-const playCurrentVideo = async () => {
-  const index = currentIndex.value
-  const video = await waitForVideoElement(index)
-  if (!video) return
-
-  if (videoError.value[index]) return
-
-  const targetMuted = !hasUserInteracted.value
-  video.muted = targetMuted
-  videoMuted.value[index] = targetMuted
-
-  async function tryPlay(muted, retryCount) {
-    video.muted = muted
-    videoMuted.value[index] = muted
-    try {
-      await video.play()
-      isPaused.value[index] = false
-    } catch (e) {
-      if (e.name === 'NotAllowedError' && !muted) {
-        tryPlay(true, retryCount)
-      } else if (e.name === 'AbortError' && retryCount < 3) {
-        setTimeout(() => {
-          tryPlay(muted, retryCount + 1)
-        }, 300)
-      }
-    }
-  }
-
-  if (videoLoaded.value[index]) {
-    tryPlay(targetMuted, 0)
-  } else {
-    videoLoading.value[index] = true
-    video.load()
-  }
 }
 
 const togglePlay = (index) => {
   const video = videoRefs.value[index]
   if (!video) return
-  
   if (video.paused) {
     video.play()
+    isPlaying.value[index] = true
   } else {
     video.pause()
+    isPlaying.value[index] = false
   }
-}
-
-const debugVideoState = (index) => {
-  const video = videoRefs.value[index]
-  if (!video) {
-    console.log('[debugVideoState] 视频元素不存在')
-    return
-  }
-  
-  const rect = video.getBoundingClientRect()
-  console.log('[debugVideoState] 视频元素信息:', {
-    index,
-    src: video.src,
-    poster: video.poster,
-    paused: video.paused,
-    duration: video.duration,
-    currentTime: video.currentTime,
-    readyState: video.readyState,
-    buffered: video.buffered?.length,
-    muted: video.muted,
-    volume: video.volume,
-    width: rect.width,
-    height: rect.height,
-    offsetTop: rect.top,
-    offsetLeft: rect.left,
-    hidden: video.hidden,
-    display: window.getComputedStyle(video).display,
-    visibility: window.getComputedStyle(video).visibility,
-    zIndex: window.getComputedStyle(video).zIndex,
-  })
-}
-
-const toggleMute = (index) => {
-  const video = videoRefs.value[index]
-  if (!video) return
-  video.muted = !video.muted
-  videoMuted.value[index] = video.muted
 }
 
 const handleWheel = (e) => {
@@ -485,7 +342,7 @@ const handleTouchEnd = (e) => {
   }
   isDragging = false
   const deltaY = touchCurrentY - touchStartY
-  const threshold = 50
+  const threshold = window.innerHeight * 0.2
   if (Math.abs(deltaY) > threshold) {
     if (deltaY > 0) {
       switchVideo(1)
@@ -498,64 +355,19 @@ const handleTouchEnd = (e) => {
 }
 
 const switchVideo = (direction) => {
-  console.log('[switchVideo] 切换方向:', direction, '当前索引:', currentIndex.value)
-  if (isAnimating.value) {
-    console.log('[switchVideo] 正在动画中，跳过')
-    return
-  }
+  if (isAnimating.value) return
   const newIndex = currentIndex.value + direction
-  console.log('[switchVideo] 新索引:', newIndex, '视频总数:', works.value.length)
-  
-  if (newIndex < 0) {
-    console.log('[switchVideo] 已经是第一个视频')
+  if (newIndex < 0 || newIndex >= works.value.length) {
     animateOffsetTo(0)
     return
   }
-  
-  if (newIndex >= works.value.length) {
-    console.log('[switchVideo] 接近列表末尾，预加载更多')
-    loadWorks()
-    animateOffsetTo(0)
-    return
-  }
-  
-  hasUserInteracted.value = true
-  
-  const oldVideo = videoRefs.value[currentIndex.value]
-  if (oldVideo) {
-    oldVideo.pause()
-    isPaused.value[currentIndex.value] = true
-    const work = works.value[currentIndex.value]
-    if (work) {
-      const watchDuration = watchStartTime.value[currentIndex.value] 
-        ? Math.floor((Date.now() - watchStartTime.value[currentIndex.value]) / 1000) 
-        : Math.floor(oldVideo.currentTime)
-      const isComplete = oldVideo.duration > 0 && oldVideo.currentTime / oldVideo.duration >= 0.9
-      recordWatchHistory({ 
-        workId: work.id, 
-        watchDuration, 
-        isComplete 
-      })
-    }
-  }
-  
   isAnimating.value = true
   const targetOffset = direction * window.innerHeight
-  
   animateOffsetTo(targetOffset, () => {
     offsetY.value = 0
     currentIndex.value = newIndex
     isAnimating.value = false
-
-    nextTick(() => {
-      setTimeout(() => {
-        playCurrentVideo()
-      }, 50)
-    })
-
-    if (currentIndex.value >= works.value.length - 2) {
-      loadWorks()
-    }
+    playCurrentVideo()
   })
 }
 
@@ -618,21 +430,16 @@ const handleFollow = async (work) => {
   try {
     const result = await toggleFollow(followeeId)
     if (result.code === 200) {
-      const idx = works.value.findIndex(w => w.id === work.id)
-      if (idx !== -1) {
-        works.value[idx].isFollowing = result.data
+      if (!result.data) {
+        works.value = works.value.filter(w => w.userId !== work.userId)
+        if (currentIndex.value >= works.value.length) {
+          currentIndex.value = Math.max(0, works.value.length - 1)
+        }
       }
     }
   } catch (err) {
     console.error('关注失败', err)
     alert('关注失败，请重试')
-  }
-}
-
-const goToProfile = (work) => {
-  const userId = work.userId || work.user_id
-  if (userId) {
-    router.push(`/profile/${userId}`)
   }
 }
 
@@ -718,8 +525,6 @@ onUnmounted(() => {
   overflow: hidden;
   background: #000;
   position: relative;
-  width: 100%;
-  max-width: calc(100% - 200px);
 }
 
 .video-wrapper {
@@ -734,37 +539,36 @@ onUnmounted(() => {
   width: 100%;
   position: relative;
   background: #000;
-  display: flex;
 }
 
 .video-content {
-  flex: 1;
   height: 100%;
+  width: calc(100% - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   z-index: 1;
-  overflow: hidden;
 }
 
 .slide-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #000;
-  display: block;
+  pointer-events: none;
 }
 
-.loading-overlay {
+.video-loading {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.7);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  z-index: 10;
+  gap: 10px;
 }
 
 .loading-spinner {
@@ -776,79 +580,43 @@ onUnmounted(() => {
   animation: spin 1s linear infinite;
 }
 
-.loading-text {
-  color: #fff;
-  font-size: 14px;
-  margin-top: 12px;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.cover-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.video-error {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
-  background: #000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-}
-
-.video-error p {
-  margin-bottom: 12px;
-  font-size: 16px;
-}
-
-.video-error button {
-  padding: 8px 24px;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 20px;
-  color: #fff;
+.loading-text {
+  color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
 }
 
-.video-error button:hover {
-  background: rgba(255, 255, 255, 0.3);
+.video-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 2;
 }
 
 .video-overlay {
   position: absolute;
   top: 0;
   left: 0;
-  width: calc(100% - 80px);
-  height: 100%;
+  right: 80px;
+  bottom: 0;
   z-index: 3;
   cursor: pointer;
+  background: transparent;
+  pointer-events: auto;
 }
 
 .pause-icon {
   position: absolute;
   top: 50%;
-  left: calc(50% - 40px);
+  left: calc(50% + 5px);
   transform: translate(-50%, -50%);
   z-index: 5;
   cursor: pointer;
@@ -856,31 +624,18 @@ onUnmounted(() => {
   transition: opacity 0.2s;
   width: 64px;
   height: 64px;
+  pointer-events: none;
+  background: transparent;
+}
+
+.pause-icon svg {
   pointer-events: auto;
+  width: 100%;
+  height: 100%;
 }
 
 .pause-icon:hover {
   opacity: 1;
-}
-
-.sound-control {
-  position: absolute;
-  top: 20px;
-  right: 100px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 50%;
-  cursor: pointer;
-  z-index: 10;
-  transition: background 0.2s;
-}
-
-.sound-control:hover {
-  background: rgba(0, 0, 0, 0.7);
 }
 
 .video-bottom-info {
@@ -929,14 +684,16 @@ onUnmounted(() => {
 }
 
 .right-actions {
-  width: 60px;
+  position: absolute;
+  right: 16px;
+  bottom: 100px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding-bottom: 100px;
+  gap: 20px;
   z-index: 10;
   pointer-events: auto;
+  width: 50px;
 }
 
 .action-item {
@@ -960,6 +717,7 @@ onUnmounted(() => {
   position: relative;
   width: 50px;
   height: 60px;
+  z-index: 100000;
 }
 
 .follow-btn img {
@@ -990,6 +748,12 @@ onUnmounted(() => {
 
 .follow-btn:hover {
   transform: scale(1.1);
+}
+
+.author-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .action-icon-wrapper {
@@ -1144,5 +908,19 @@ onUnmounted(() => {
 .send-btn:disabled {
   background: #555;
   cursor: not-allowed;
+}
+
+.empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #666;
+}
+
+.empty-state p {
+  font-size: 18px;
+  margin: 0;
 }
 </style>

@@ -2,16 +2,7 @@
   <div class="main-layout">
     <!-- 左侧边栏 -->
     <aside class="sidebar">
-      <div class="logo-section">
-        <div class="logo-icon">
-          <svg viewBox="0 0 48 48" width="32" height="32">
-            <path fill="#fe2c55" d="M34.125 10.32a7.07 7.07 0 0 1-4.095-1.29 7.07 7.07 0 0 1-2.94-3.51h-6.66v24.18a5.94 5.94 0 1 1-3.48-5.4v-6.72a12.42 12.42 0 1 0 10.08 12.18V18.18a13.5 13.5 0 0 0 7.92 2.52V14.04a7.08 7.08 0 0 1-.825-.06z"/>
-          </svg>
-        </div>
-        <span class="logo-text">抖音精选</span>
-      </div>
-
-      <nav class="nav-menu">
+      <nav class="nav-menu" style="padding-top: 24px;">
         <div class="nav-item" :class="{ active: $route.path === '/featured' }" @click="$router.push('/featured')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
@@ -35,14 +26,13 @@
       <div class="nav-divider"></div>
 
       <nav class="nav-menu">
-        <div class="nav-item">
+        <div class="nav-item" :class="{ active: $route.path === '/following' }" @click="goToFollowing">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
           </svg>
           <span>关注</span>
-          <span class="badge">1</span>
         </div>
-        <div class="nav-item">
+        <div class="nav-item" :class="{ active: $route.path === '/friends' }" @click="goToFriends">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
           </svg>
@@ -56,44 +46,7 @@
         </div>
       </nav>
 
-      <div class="nav-divider"></div>
-
-      <nav class="nav-menu">
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M21 6h-7.59l3.29-3.29L16 2l-4 4-4-4-.71.71L10.59 6H3c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2zm0 14H3V8h18v12zM9 10v8l7-4z"/>
-          </svg>
-          <span>直播</span>
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
-          </svg>
-          <span>放映厅</span>
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
-          </svg>
-          <span>短剧</span>
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-          </svg>
-          <span>小游戏</span>
-        </div>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="download-btn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-          </svg>
-          <span>下载抖音精选</span>
-        </div>
-        <div class="footer-text">手机版时看更方便</div>
-      </div>
+      
     </aside>
 
     <!-- 主内容区 -->
@@ -110,12 +63,6 @@
           </button>
         </div>
         <div class="top-actions">
-          <span class="action-item">免广告</span>
-          <span class="action-item">客户端</span>
-          <span class="action-item">壁纸</span>
-          <span class="action-item">通知</span>
-          <span class="action-item">私信</span>
-          <span class="action-item">投稿</span>
           <div class="user-avatar" v-if="userStore.isLoggedIn" @click="$router.push('/my')">
             <img :src="userStore.user?.avatar || defaultAvatar" />
           </div>
@@ -125,7 +72,7 @@
 
       <!-- 页面内容 -->
       <div class="page-content">
-        <router-view />
+        <router-view :key="$route.fullPath" />
       </div>
     </main>
   </div>
@@ -133,9 +80,21 @@
 
 <script setup>
 import { useUserStore } from '../stores/user'
+import { useRouter } from 'vue-router'
 
 const userStore = useUserStore()
+const router = useRouter()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+
+const goToFriends = () => {
+  console.log('朋友按钮被点击了')
+  router.push('/friends')
+}
+
+const goToFollowing = () => {
+  console.log('关注按钮被点击了')
+  router.push('/following')
+}
 </script>
 
 <style scoped>
@@ -153,6 +112,9 @@ const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726
   flex-direction: column;
   padding: 16px 0;
   border-right: 1px solid #2a2a2a;
+  z-index: 999999;
+  position: relative;
+  flex-shrink: 0;
 }
 
 .logo-section {
@@ -188,6 +150,8 @@ const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726
   cursor: pointer;
   transition: background 0.2s;
   position: relative;
+  pointer-events: auto;
+  z-index: 1;
 }
 
 .nav-item:hover {
@@ -258,6 +222,7 @@ const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .top-bar {
@@ -359,5 +324,7 @@ const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726
 .page-content {
   flex: 1;
   overflow: hidden;
+  position: relative;
+  min-height: 0;
 }
 </style>

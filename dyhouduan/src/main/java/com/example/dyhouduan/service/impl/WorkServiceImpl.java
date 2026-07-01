@@ -1,15 +1,34 @@
 package com.example.dyhouduan.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.dyhouduan.entity.Like;
 import com.example.dyhouduan.entity.Work;
+import com.example.dyhouduan.mapper.LikeMapper;
 import com.example.dyhouduan.mapper.WorkMapper;
 import com.example.dyhouduan.service.WorkService;
+import com.example.dyhouduan.service.WatchHistoryService;
+import com.example.dyhouduan.utils.OssUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements WorkService {
+
+    @Autowired
+    private LikeMapper likeMapper;
+
+    @Autowired
+    private OssUtil ossUtil;
+
+    @Autowired
+    private WatchHistoryService watchHistoryService;
 
     @Override
     public List<Work> getWorksWithUser(int page, int size) {
@@ -23,9 +42,69 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     }
 
     @Override
+    public List<Work> getWorksByUserIds(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        return baseMapper.selectByUserIds(userIds);
+    }
+
+    @Override
+    public List<Work> getHotWorks(int page, int size) {
+        int offset = (page - 1) * size;
+        return baseMapper.selectHotWorks(offset, size);
+    }
+
+    @Override
+    public List<Work> getRecommendWorks(Long userId, int page, int size) {
+        int offset = (page - 1) * size;
+        List<Work> allHotWorks = baseMapper.selectHotWorks(offset, size * 2);
+        
+        if (userId != null) {
+            List<Long> watchedIds = watchHistoryService.getWatchedWorkIds(userId, 100);
+            Set<Long> watchedSet = watchedIds.stream().collect(Collectors.toSet());
+            
+            return allHotWorks.stream()
+                    .filter(work -> !watchedSet.contains(work.getId()))
+                    .limit(size)
+                    .collect(Collectors.toList());
+        }
+        
+        return allHotWorks.stream().limit(size).collect(Collectors.toList());
+    }
+
+    @Override
+    public void incrementViews(Long workId) {
+        Work work = getById(workId);
+        if (work != null) {
+            work.setViews(work.getViews() + 1);
+            updateById(work);
+        }
+    }
+
+    @Override
     public boolean publishWork(Work work) {
         work.setLikesCount(0);
         work.setCommentsCount(0);
+        work.setViews(0);
         return save(work);
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteWorkWithLikes(Long id) {
+        Work work = getById(id);
+        if (work == null) {
+            return false;
+        }
+
+        ossUtil.deleteFile(work.getUrl());
+        ossUtil.deleteFile(work.getThumbnail());
+
+        LambdaQueryWrapper<Like> likeWrapper = new LambdaQueryWrapper<>();
+        likeWrapper.eq(Like::getWorkId, id);
+        likeMapper.delete(likeWrapper);
+        
+        return removeById(id);
     }
 }

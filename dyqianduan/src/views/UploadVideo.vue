@@ -87,11 +87,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { publishWork } from '../api/work'
-import request from '../utils/request'
+import { uploadVideo, uploadImage, cleanupFiles } from '../api/upload'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -105,6 +105,10 @@ const uploadingThumbnail = ref(false)
 const publishing = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
+const hasManualThumbnail = ref(false)
+const isPublished = ref(false)
+const oldVideoUrl = ref('')
+const oldThumbnailUrl = ref('')
 
 const form = ref({
   title: '',
@@ -117,7 +121,33 @@ onMounted(() => {
   }
 })
 
+onBeforeRouteLeave(async (to, from) => {
+  if (isPublished.value) {
+    return
+  }
+
+  if (videoUrl.value || thumbnailUrl.value) {
+    const filesToCleanup = []
+    if (videoUrl.value) filesToCleanup.push(videoUrl.value)
+    if (thumbnailUrl.value) filesToCleanup.push(thumbnailUrl.value)
+
+    if (filesToCleanup.length > 0) {
+      try {
+        await cleanupFiles(filesToCleanup)
+        console.log('已清理未发布的文件:', filesToCleanup)
+      } catch (err) {
+        console.error('清理文件失败:', err)
+      }
+    }
+  }
+})
+
 const triggerVideoUpload = () => {
+  if (!hasManualThumbnail.value) {
+    thumbnailUrl.value = ''
+  }
+  oldVideoUrl.value = videoUrl.value
+  oldThumbnailUrl.value = thumbnailUrl.value
   videoInput.value?.click()
 }
 
@@ -138,13 +168,30 @@ const handleVideoChange = async (e) => {
   errorMessage.value = ''
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    const result = await request.post('/upload/video', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const result = await uploadVideo(file)
     if (result.code === 200) {
-      videoUrl.value = result.data
+      const newVideoUrl = result.data
+      const newThumbnailUrl = thumbnailUrl.value
+
+      if (oldVideoUrl.value || oldThumbnailUrl.value) {
+        const filesToCleanup = []
+        if (oldVideoUrl.value) filesToCleanup.push(oldVideoUrl.value)
+        if (oldThumbnailUrl.value) filesToCleanup.push(oldThumbnailUrl.value)
+        try {
+          await cleanupFiles(filesToCleanup)
+          console.log('已清理重新上传前的旧文件:', filesToCleanup)
+        } catch (err) {
+          console.error('清理旧文件失败:', err)
+        }
+      }
+
+      videoUrl.value = newVideoUrl
+      if (!hasManualThumbnail.value) {
+        thumbnailUrl.value = ''
+        await generateThumbnailFromVideo(file)
+      }
+      oldVideoUrl.value = ''
+      oldThumbnailUrl.value = ''
     } else {
       errorMessage.value = result.message || '视频上传失败'
     }
@@ -153,6 +200,52 @@ const handleVideoChange = async (e) => {
   } finally {
     uploadingVideo.value = false
   }
+}
+
+const generateThumbnailFromVideo = (videoFile) => {
+  return new Promise((resolve) => {
+    const video = document.createElement('video')
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    video.crossOrigin = 'anonymous'
+    video.preload = 'metadata'
+    video.src = URL.createObjectURL(videoFile)
+
+    video.onloadedmetadata = () => {
+      video.currentTime = 0.1
+    }
+
+    video.onseeked = () => {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const thumbnailFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' })
+          const formData = new FormData()
+          formData.append('file', thumbnailFile)
+
+          try {
+            const result = await uploadImage(thumbnailFile)
+            if (result.code === 200) {
+              thumbnailUrl.value = result.data
+            }
+          } catch (err) {
+            console.warn('自动生成封面失败:', err)
+          }
+        }
+        URL.revokeObjectURL(video.src)
+        resolve()
+      }, 'image/jpeg', 0.9)
+    }
+
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src)
+      resolve()
+    }
+  })
 }
 
 const handleThumbnailChange = async (e) => {
@@ -168,13 +261,10 @@ const handleThumbnailChange = async (e) => {
   errorMessage.value = ''
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    const result = await request.post('/upload/image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const result = await uploadImage(file)
     if (result.code === 200) {
       thumbnailUrl.value = result.data
+      hasManualThumbnail.value = true
     } else {
       errorMessage.value = result.message || '封面上传失败'
     }
@@ -204,6 +294,7 @@ const handlePublish = async () => {
     })
     if (result.code === 200) {
       successMessage.value = '发布成功！'
+      isPublished.value = true
       setTimeout(() => {
         router.push('/')
       }, 1500)

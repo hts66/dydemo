@@ -1,12 +1,15 @@
 package com.example.dyhouduan.controller;
 
 import com.example.dyhouduan.dto.Response;
+import com.example.dyhouduan.entity.Work;
 import com.example.dyhouduan.service.LikeService;
 import com.example.dyhouduan.utils.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Slf4j
 @RestController
@@ -27,6 +30,7 @@ public class LikeController {
                 return Response.error(401, "未登录");
             }
             boolean isLiked = likeService.toggleLike(userId, workId);
+            log.info("用户[{}]对作品[{}]执行点赞操作，结果：{}", userId, workId, isLiked ? "已点赞" : "已取消点赞");
             return Response.success(isLiked);
         } catch (Exception e) {
             log.error("点赞失败", e);
@@ -42,10 +46,22 @@ public class LikeController {
                 return Response.success(false);
             }
             boolean isLiked = likeService.isLiked(userId, workId);
+            log.info("用户[{}]查询作品[{}]的点赞状态：{}", userId, workId, isLiked);
             return Response.success(isLiked);
         } catch (Exception e) {
             log.error("查询点赞状态失败", e);
             return Response.error("查询点赞状态失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/list/{userId}")
+    public Response<List<Work>> getLikedWorks(@PathVariable Long userId) {
+        try {
+            List<Work> works = likeService.getLikedWorks(userId);
+            return Response.success(works);
+        } catch (Exception e) {
+            log.error("获取点赞列表失败", e);
+            return Response.error("获取点赞列表失败: " + e.getMessage());
         }
     }
 

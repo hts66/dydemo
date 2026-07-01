@@ -15,4 +15,6 @@ public interface FollowService extends IService<Follow> {
     List<Map<String, Object>> getFollowingList(Long userId);
 
     List<Map<String, Object>> getFollowerList(Long userId);
+
+    List<Map<String, Object>> getMutualFriends(Long userId);
 }

@@ -12,12 +12,12 @@ import java.util.Map;
 @Mapper
 public interface FollowMapper extends BaseMapper<Follow> {
 
-    @Select("SELECT * FROM follows WHERE follower_id = #{followerId} AND followee_id = #{followeeId}")
-    Follow selectByFollowerAndFollowee(@Param("followerId") Long followerId, @Param("followeeId") Long followeeId);
+    @Select("SELECT * FROM follows WHERE follower_id = #{followerId} AND following_id = #{followingId}")
+    Follow selectByFollowerAndFollowing(@Param("followerId") Long followerId, @Param("followingId") Long followingId);
 
     @Select("SELECT u.id, u.username, u.avatar, u.bio, u.gender, u.email " +
             "FROM users u " +
-            "INNER JOIN follows f ON u.id = f.followee_id " +
+            "INNER JOIN follows f ON u.id = f.following_id " +
             "WHERE f.follower_id = #{userId} " +
             "ORDER BY f.created_at DESC")
     List<Map<String, Object>> selectFollowingList(@Param("userId") Long userId);
@@ -25,7 +25,15 @@ public interface FollowMapper extends BaseMapper<Follow> {
     @Select("SELECT u.id, u.username, u.avatar, u.bio, u.gender, u.email " +
             "FROM users u " +
             "INNER JOIN follows f ON u.id = f.follower_id " +
-            "WHERE f.followee_id = #{userId} " +
+            "WHERE f.following_id = #{userId} " +
             "ORDER BY f.created_at DESC")
     List<Map<String, Object>> selectFollowerList(@Param("userId") Long userId);
+
+    @Select("SELECT u.id, u.username, u.avatar, u.bio, u.gender, u.email " +
+            "FROM users u " +
+            "INNER JOIN follows f1 ON u.id = f1.following_id " +
+            "INNER JOIN follows f2 ON u.id = f2.follower_id " +
+            "WHERE f1.follower_id = #{userId} AND f2.following_id = #{userId} " +
+            "ORDER BY f1.created_at DESC")
+    List<Map<String, Object>> selectMutualFriends(@Param("userId") Long userId);
 }

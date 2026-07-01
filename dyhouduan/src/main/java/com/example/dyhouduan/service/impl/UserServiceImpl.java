@@ -7,8 +7,11 @@ import com.example.dyhouduan.dto.RegisterRequest;
 import com.example.dyhouduan.entity.User;
 import com.example.dyhouduan.mapper.UserMapper;
 import com.example.dyhouduan.service.UserService;
+import com.example.dyhouduan.utils.FileStorageUtil;
 import com.example.dyhouduan.utils.JwtUtil;
+import com.example.dyhouduan.utils.OssUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,6 +19,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private OssUtil ossUtil;
+
+    @Autowired
+    private FileStorageUtil fileStorageUtil;
+
+    @Value("${aliyun.oss.endpoint:}")
+    private String ossEndpoint;
+
+    private boolean useOss() {
+        return ossEndpoint != null && !ossEndpoint.isEmpty();
+    }
 
     @Override
     public LoginResponse login(String email, String password) {
@@ -28,7 +44,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("密码错误");
         }
 
-        String token = jwtUtil.generateToken(user.getId(), user.getEmail());
+        String token = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
 
         LoginResponse.UserVO userVO = new LoginResponse.UserVO(
                 user.getId(),
@@ -39,7 +56,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 user.getAvatar()
         );
 
-        return new LoginResponse(token, userVO);
+        return new LoginResponse(token, refreshToken, userVO);
     }
 
     @Override
@@ -84,7 +101,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             user.setBio(profile.getBio());
         }
         if (profile.getAvatar() != null) {
+            String oldAvatar = user.getAvatar();
             user.setAvatar(profile.getAvatar());
+            if (oldAvatar != null && !oldAvatar.isEmpty()) {
+                if (useOss()) {
+                    ossUtil.deleteFile(oldAvatar);
+                } else {
+                    fileStorageUtil.deleteFile(oldAvatar);
+                }
+            }
         }
         this.updateById(user);
         return user;

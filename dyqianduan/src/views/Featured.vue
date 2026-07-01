@@ -55,12 +55,13 @@
           <div class="video-section">
             <video
               ref="videoPlayer"
-              :src="currentVideo.url"
+              :src="getProxyUrl(currentVideo.url)"
               :poster="currentVideo.thumbnail"
               class="modal-video"
               controls
               autoplay
               loop
+              muted
             ></video>
           </div>
           <div class="interaction-section">
@@ -137,6 +138,14 @@ const router = useRouter()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
+const getProxyUrl = (url) => {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return `/api/video/proxy?url=${encodeURIComponent(url)}`
+  }
+  return url
+}
+
 const categories = ['全部', '公开课', '游戏', '二次元', '音乐', '影视', '美食', '知识', '小剧场', '生活vlog', '体育', '旅行', '亲子', '动物', '三农', '汽车', '美妆穿搭']
 const selectedCategory = ref('全部')
 const works = ref([])
@@ -174,6 +183,10 @@ const loadWorks = async () => {
   }
 }
 
+onMounted(async () => {
+  await loadWorks()
+})
+
 const openVideo = async (work) => {
   currentVideo.value = work
   document.body.style.overflow = 'hidden'
@@ -192,6 +205,14 @@ const openVideo = async (work) => {
     }
   } catch (err) {
     console.error('加载视频信息失败', err)
+  }
+  
+  await nextTick()
+  
+  if (videoPlayer.value) {
+    videoPlayer.value.currentTime = 0
+    videoPlayer.value.muted = true
+    videoPlayer.value.play().catch(e => console.error('播放失败', e))
   }
 }
 
@@ -281,9 +302,6 @@ const formatTime = (dateStr) => {
   return `${days}天前`
 }
 
-onMounted(() => {
-  loadWorks()
-})
 </script>
 
 <style scoped>

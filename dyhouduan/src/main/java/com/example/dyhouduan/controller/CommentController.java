@@ -26,6 +26,7 @@ public class CommentController {
     public Response<List<Comment>> getComments(@PathVariable Long workId) {
         try {
             List<Comment> comments = commentService.getCommentsByWorkId(workId);
+            log.info("查询作品[{}]的评论列表，共{}条评论", workId, comments.size());
             return Response.success(comments);
         } catch (Exception e) {
             log.error("获取评论失败", e);
@@ -42,6 +43,7 @@ public class CommentController {
             }
             boolean success = commentService.addComment(userId, request.getWorkId(), request.getContent());
             if (success) {
+                log.info("用户[{}]对作品[{}]发表评论：{}", userId, request.getWorkId(), request.getContent());
                 return Response.success("评论成功", null);
             }
             return Response.error("评论失败");

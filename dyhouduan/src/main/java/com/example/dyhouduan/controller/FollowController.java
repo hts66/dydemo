@@ -31,6 +31,7 @@ public class FollowController {
                 return Response.error(401, "未登录");
             }
             boolean isFollowing = followService.toggleFollow(userId, followeeId);
+            log.info("用户[{}]对用户[{}]执行关注操作，结果：{}", userId, followeeId, isFollowing ? "已关注" : "已取消关注");
             return Response.success(isFollowing);
         } catch (Exception e) {
             log.error("关注操作失败", e);
@@ -46,6 +47,7 @@ public class FollowController {
                 return Response.success(false);
             }
             boolean isFollowing = followService.isFollowing(userId, followeeId);
+            log.info("用户[{}]查询用户[{}]的关注状态：{}", userId, followeeId, isFollowing);
             return Response.success(isFollowing);
         } catch (Exception e) {
             log.error("查询关注状态失败", e);
@@ -65,6 +67,17 @@ public class FollowController {
         } catch (Exception e) {
             log.error("获取关注列表失败", e);
             return Response.error("获取关注列表失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/friends/{userId}")
+    public Response<List<Map<String, Object>>> getFriends(@PathVariable Long userId) {
+        try {
+            List<Map<String, Object>> friends = followService.getMutualFriends(userId);
+            return Response.success(friends);
+        } catch (Exception e) {
+            log.error("获取朋友列表失败", e);
+            return Response.error("获取朋友列表失败: " + e.getMessage());
         }
     }
 

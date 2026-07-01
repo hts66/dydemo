@@ -10,34 +10,56 @@ const router = createRouter({
     },
     {
       path: '/recommend',
-      name: 'Recommend',
       component: MainLayout,
       children: [
         {
           path: '',
+          name: 'Recommend',
           component: () => import('../views/Recommend.vue'),
         },
       ],
     },
     {
       path: '/featured',
-      name: 'Featured',
       component: MainLayout,
       children: [
         {
           path: '',
+          name: 'Featured',
           component: () => import('../views/Featured.vue'),
         },
       ],
     },
     {
       path: '/my',
-      name: 'My',
       component: MainLayout,
       children: [
         {
           path: '',
+          name: 'My',
           component: () => import('../views/My.vue'),
+        },
+      ],
+    },
+    {
+      path: '/friends',
+      component: MainLayout,
+      children: [
+        {
+          path: '',
+          name: 'Friends',
+          component: () => import('../views/Friends.vue'),
+        },
+      ],
+    },
+    {
+      path: '/following',
+      component: MainLayout,
+      children: [
+        {
+          path: '',
+          name: 'Following',
+          component: () => import('../views/Following.vue'),
         },
       ],
     },
