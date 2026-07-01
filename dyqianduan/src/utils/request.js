@@ -34,6 +34,12 @@ request.interceptors.request.use(
 
 request.interceptors.response.use(
   (response) => {
+    const data = response.data
+    if (data && data.code !== 200) {
+      const error = new Error(data.message || '请求失败')
+      error.response = response
+      return Promise.reject(error)
+    }
     return response.data
   },
   async (error) => {

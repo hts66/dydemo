@@ -1,22 +1,22 @@
 <template>
-  <div class="register-container">
-    <div class="register-card">
+  <div class="forgot-container">
+    <div class="forgot-card">
       <div class="logo-area">
         <div class="logo">
           <svg viewBox="0 0 24 24" width="40" height="40" fill="#fe2c55">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
           </svg>
         </div>
-        <h2 class="register-title">短视频平台</h2>
-        <p class="register-subtitle">创建你的账号</p>
+        <h2 class="forgot-title">忘记密码</h2>
+        <p class="forgot-subtitle">通过邮箱验证码找回密码</p>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="register-form">
+      <form @submit.prevent="handleSubmit" class="forgot-form">
         <div class="form-group">
           <input
             v-model="form.email"
             type="email"
-            placeholder="请输入邮箱"
+            placeholder="请输入注册时的邮箱"
             class="form-input"
             :class="{ error: errors.email }"
           />
@@ -25,31 +25,20 @@
 
         <div class="form-group">
           <input
-            v-model="form.username"
-            type="text"
-            placeholder="请输入用户名"
-            class="form-input"
-            :class="{ error: errors.username }"
-          />
-          <span v-if="errors.username" class="error-message">{{ errors.username }}</span>
-        </div>
-
-        <div class="form-group">
-          <input
-            v-model="form.password"
+            v-model="form.newPassword"
             type="password"
-            placeholder="请输入密码（6-20位）"
+            placeholder="请输入新密码（6-20位）"
             class="form-input"
-            :class="{ error: errors.password }"
+            :class="{ error: errors.newPassword }"
           />
-          <span v-if="errors.password" class="error-message">{{ errors.password }}</span>
+          <span v-if="errors.newPassword" class="error-message">{{ errors.newPassword }}</span>
         </div>
 
         <div class="form-group">
           <input
             v-model="form.confirmPassword"
             type="password"
-            placeholder="请再次输入密码"
+            placeholder="请再次输入新密码"
             class="form-input"
             :class="{ error: errors.confirmPassword }"
           />
@@ -97,16 +86,17 @@
         </div>
 
         <button type="submit" class="submit-btn" :disabled="loading">
-          <span v-if="loading">注册中...</span>
-          <span v-else>注册</span>
+          <span v-if="loading">提交中...</span>
+          <span v-else>重置密码</span>
         </button>
 
         <span v-if="errorMessage" class="form-error">{{ errorMessage }}</span>
+        <span v-if="successMessage" class="form-success">{{ successMessage }}</span>
       </form>
 
       <p class="login-link">
-        已有账号？
-        <router-link to="/login">立即登录</router-link>
+        记得密码了？
+        <router-link to="/login">返回登录</router-link>
       </p>
     </div>
   </div>
@@ -115,16 +105,13 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../stores/user'
 import request from '../utils/request'
 
 const router = useRouter()
-const userStore = useUserStore()
 
 const form = reactive({
   email: '',
-  username: '',
-  password: '',
+  newPassword: '',
   confirmPassword: '',
   code: '',
   captcha: '',
@@ -133,13 +120,13 @@ const form = reactive({
 
 const errors = reactive({
   email: '',
-  username: '',
-  password: '',
+  newPassword: '',
   confirmPassword: '',
   captcha: '',
 })
 
 const errorMessage = ref('')
+const successMessage = ref('')
 const loading = ref(false)
 const codeBtnDisabled = ref(false)
 const codeCountdown = ref(60)
@@ -164,11 +151,11 @@ onMounted(() => {
 const validateForm = () => {
   let isValid = true
   errors.email = ''
-  errors.username = ''
-  errors.password = ''
+  errors.newPassword = ''
   errors.confirmPassword = ''
   errors.captcha = ''
   errorMessage.value = ''
+  successMessage.value = ''
 
   if (!form.email) {
     errors.email = '请输入邮箱'
@@ -178,26 +165,18 @@ const validateForm = () => {
     isValid = false
   }
 
-  if (!form.username) {
-    errors.username = '请输入用户名'
+  if (!form.newPassword) {
+    errors.newPassword = '请输入新密码'
     isValid = false
-  } else if (form.username.length < 2 || form.username.length > 20) {
-    errors.username = '用户名长度必须在2-20位之间'
-    isValid = false
-  }
-
-  if (!form.password) {
-    errors.password = '请输入密码'
-    isValid = false
-  } else if (form.password.length < 6 || form.password.length > 20) {
-    errors.password = '密码长度必须在6-20位之间'
+  } else if (form.newPassword.length < 6 || form.newPassword.length > 20) {
+    errors.newPassword = '密码长度必须在6-20位之间'
     isValid = false
   }
 
   if (!form.confirmPassword) {
     errors.confirmPassword = '请确认密码'
     isValid = false
-  } else if (form.password !== form.confirmPassword) {
+  } else if (form.newPassword !== form.confirmPassword) {
     errors.confirmPassword = '两次输入的密码不一致'
     isValid = false
   }
@@ -230,7 +209,7 @@ const sendCode = async () => {
   }
 
   try {
-    await request.post('/auth/send-code', {
+    await request.post('/auth/forgot-password', {
       email: form.email,
       captcha: form.captcha,
       captchaKey: form.captchaKey,
@@ -263,19 +242,18 @@ const handleSubmit = async () => {
   loading.value = true
 
   try {
-    await request.post('/auth/register/code', {
+    await request.post('/auth/reset-password', {
       email: form.email,
-      username: form.username,
-      password: form.password,
       code: form.code,
-      captcha: form.captcha,
-      captchaKey: form.captchaKey,
+      newPassword: form.newPassword,
     })
 
-    await userStore.handleLogin(form.email, form.password)
-    router.push('/')
+    successMessage.value = '密码重置成功，请登录'
+    setTimeout(() => {
+      router.push('/login')
+    }, 2000)
   } catch (err: any) {
-    errorMessage.value = err?.message || '注册失败'
+    errorMessage.value = err?.message || '重置密码失败'
     await refreshCaptcha()
     form.captcha = ''
   } finally {
@@ -285,7 +263,7 @@ const handleSubmit = async () => {
 </script>
 
 <style scoped>
-.register-container {
+.forgot-container {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -293,7 +271,7 @@ const handleSubmit = async () => {
   background: #f5f5f5;
 }
 
-.register-card {
+.forgot-card {
   background: white;
   border-radius: 16px;
   padding: 48px 40px;
@@ -311,19 +289,19 @@ const handleSubmit = async () => {
   margin-bottom: 12px;
 }
 
-.register-title {
+.forgot-title {
   font-size: 24px;
   font-weight: 600;
   color: #1a1a1a;
   margin-bottom: 4px;
 }
 
-.register-subtitle {
+.forgot-subtitle {
   font-size: 14px;
   color: #999;
 }
 
-.register-form {
+.forgot-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -433,6 +411,13 @@ const handleSubmit = async () => {
 .form-error {
   text-align: center;
   color: #ff4757;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.form-success {
+  text-align: center;
+  color: #27ae60;
   font-size: 13px;
   margin-top: 8px;
 }

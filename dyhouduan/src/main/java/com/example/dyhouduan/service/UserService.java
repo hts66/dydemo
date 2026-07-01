@@ -13,4 +13,6 @@ public interface UserService extends IService<User> {
     User findByEmail(String email);
 
     User updateProfile(Long userId, User profile);
+
+    User resetPassword(String email, String newPassword);
 }

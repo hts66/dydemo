@@ -12,6 +12,7 @@ import com.example.dyhouduan.utils.JwtUtil;
 import com.example.dyhouduan.utils.OssUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,6 +26,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private FileStorageUtil fileStorageUtil;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Value("${aliyun.oss.endpoint:}")
     private String ossEndpoint;
@@ -40,7 +44,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("用户不存在");
         }
 
-        if (!user.getPassword().equals(password)) {
+        if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("密码错误");
         }
 
@@ -68,7 +72,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         User user = new User();
         user.setEmail(request.getEmail());
-        user.setPassword(request.getPassword());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setUsername(request.getUsername());
         user.setGender(0);
         user.setBio("");
@@ -111,6 +115,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 }
             }
         }
+        this.updateById(user);
+        return user;
+    }
+
+    @Override
+    public User resetPassword(String email, String newPassword) {
+        User user = findByEmail(email);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
         this.updateById(user);
         return user;
     }
