@@ -86,6 +86,14 @@ public class AuthController {
     @PostMapping("/register")
     public Response<User> register(@Valid @RequestBody RegisterRequest request) {
         try {
+            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
+                return Response.error(400, "图形验证码错误");
+            }
+
+            if (!verificationCodeService.verifyCode(request.getEmail(), request.getCode())) {
+                return Response.error(400, "验证码错误或已过期");
+            }
+
             User user = userService.register(request);
             return Response.success("注册成功", user);
         } catch (Exception e) {
