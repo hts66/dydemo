@@ -239,7 +239,7 @@ public class AuthController {
         if (storedCaptcha == null) {
             return false;
         }
-        boolean valid = storedCaptcha.toString().equalsIgnoreCase(captcha);
+        boolean valid = storedCaptcha.toString().equalsIgnoreCase(captcha.trim());
         if (valid) {
             redisTemplate.delete("captcha:" + captchaKey);
         }

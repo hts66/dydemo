@@ -246,6 +246,8 @@ const handleSubmit = async () => {
       email: form.email,
       code: form.code,
       newPassword: form.newPassword,
+      captcha: form.captcha,
+      captchaKey: form.captchaKey,
     })
 
     successMessage.value = '密码重置成功，请登录'

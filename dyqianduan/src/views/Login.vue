@@ -223,13 +223,25 @@ const handleSubmit = async () => {
       captchaKey: form.captchaKey,
     })
 
+    console.log('Login response:', response)
+    
     if (response.data) {
-      userStore.setToken(response.data.token)
-      userStore.setRefreshToken(response.data.refreshToken)
-      userStore.setUser(response.data.user)
+      console.log('Setting token:', response.data.token)
+      localStorage.setItem('token', response.data.token)
+      localStorage.setItem('refreshToken', response.data.refreshToken)
+      localStorage.setItem('user', JSON.stringify(response.data.user))
+      
+      userStore.token = response.data.token
+      userStore.refreshToken = response.data.refreshToken
+      userStore.user = response.data.user
+      
+      console.log('User store after login:', userStore)
     }
 
-    router.push('/')
+    console.log('Navigating to /featured')
+    setTimeout(() => {
+      window.location.href = '/featured'
+    }, 100)
   } catch (err: any) {
     errorMessage.value = err?.message || '登录失败'
     await refreshCaptcha()
