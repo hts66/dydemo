@@ -18,20 +18,10 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/auth/login",
-                    "/api/auth/register",
-                    "/api/auth/send-code",
-                    "/api/auth/verify-code",
-                    "/api/auth/forgot-password",
-                    "/api/auth/reset-password",
-                    "/api/captcha",
-                    "/api/works/**",
-                    "/api/video/**",
-                    "/error"
-                ).permitAll()
-                .anyRequest().authenticated()
-            );
+                .anyRequest().permitAll()
+            )
+            .formLogin(AbstractHttpConfigurer::disable)
+            .httpBasic(AbstractHttpConfigurer::disable);
 
         return http.build();
     }

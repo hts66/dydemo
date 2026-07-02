@@ -223,19 +223,25 @@ const handleSubmit = async () => {
       captchaKey: form.captchaKey,
     })
 
-    console.log('Login response:', response)
+    console.log('Login response full:', response)
     
-    if (response.data) {
-      console.log('Setting token:', response.data.token)
-      localStorage.setItem('token', response.data.token)
-      localStorage.setItem('refreshToken', response.data.refreshToken)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
+    const loginData = response.data || response
+    console.log('Login data:', loginData)
+    
+    if (loginData.token) {
+      console.log('Setting token:', loginData.token)
+      localStorage.setItem('token', loginData.token)
+      localStorage.setItem('refreshToken', loginData.refreshToken || '')
+      localStorage.setItem('user', JSON.stringify(loginData.user || {}))
       
-      userStore.token = response.data.token
-      userStore.refreshToken = response.data.refreshToken
-      userStore.user = response.data.user
-      
-      console.log('User store after login:', userStore)
+      userStore.token = loginData.token
+      userStore.refreshToken = loginData.refreshToken || ''
+      userStore.user = loginData.user || {}
+    } else {
+      console.error('No token in response:', loginData)
+      errorMessage.value = '登录失败：未获取到令牌'
+      loading.value = false
+      return
     }
 
     console.log('Navigating to /featured')
