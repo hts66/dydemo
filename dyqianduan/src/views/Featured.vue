@@ -9,7 +9,11 @@
         @click="openVideo(work)"
       >
         <div class="video-thumbnail">
-          <img :src="work.thumbnail || work.url" :alt="work.title" />
+          <img 
+            :src="work.thumbnail || work.url" 
+            :alt="work.title" 
+            @error="handleThumbnailError($event, work)"
+          />
           <div class="video-duration">{{ formatDuration(work.duration) }}</div>
           <div class="play-icon">
             <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
@@ -109,7 +113,7 @@
               <h4 class="comments-title">评论</h4>
               <div class="comments-list">
                 <div v-for="comment in comments" :key="comment.id" class="comment-item">
-                  <img :src="comment.avatar || defaultAvatar" class="comment-avatar" />
+                  <img :src="comment.avatar || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
                   <div class="comment-content">
                     <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
                     <span class="comment-text">{{ comment.content }}</span>
@@ -194,6 +198,15 @@ const loadWorks = async () => {
     }
   } catch (err) {
     console.error('加载视频失败', err)
+  }
+}
+
+const handleThumbnailError = (event, work) => {
+  const img = event.target
+  if (work.url) {
+    img.src = `/api/video/proxy?url=${encodeURIComponent(work.url)}`
+  } else {
+    img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"%3E%3Crect fill="%232a2a2a" width="400" height="300"/%3E%3Ctext fill="%23666" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3E视频加载失败%3C/text%3E%3C/svg%3E'
   }
 }
 
@@ -714,6 +727,7 @@ const formatTime = (dateStr) => {
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .comment-content {

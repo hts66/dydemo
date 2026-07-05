@@ -103,7 +103,7 @@
         </div>
         <div class="comment-list">
           <div v-for="comment in comments" :key="comment.id" class="comment-item">
-            <img :src="comment.avatar || defaultAvatar" class="comment-avatar" />
+            <img :src="comment.avatar || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
             <div class="comment-body">
               <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
               <span class="comment-text">{{ comment.content }}</span>
@@ -474,6 +474,12 @@ const getTags = (desc) => {
   return desc.match(/#[^\s#]+/g) || []
 }
 
+const goToProfile = (userId) => {
+  if (userId) {
+    router.push(`/profile/${userId}`)
+  }
+}
+
 const formatCount = (count) => {
   if (!count) return '0'
   if (count >= 10000) return (count / 10000).toFixed(1) + '万'
@@ -837,6 +843,7 @@ onUnmounted(() => {
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .comment-body {
