@@ -1,8 +1,8 @@
 <template>
-  <div class="my-container">
+  <div class="my-container" ref="containerRef" @scroll="handleScroll">
     <div 
       class="profile-header-section"
-      :style="backgroundStyle"
+      :style="headerStyle"
       @click="toggleBackgroundPicker"
     >
       <button class="logout-btn" v-if="userStore.isLoggedIn" @click.stop="handleLogout">退出登录</button>
@@ -373,6 +373,7 @@ import request from '../utils/request'
 const router = useRouter()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+const containerRef = ref(null)
 
 const activeTab = ref('works')
 const myWorks = ref([])
@@ -404,6 +405,7 @@ const currentBackground = ref('')
 const showBackgroundPicker = ref(false)
 const backgroundFileInput = ref(null)
 const previewBackground = ref('')
+const headerHeight = ref(300)
 
 const toggleBackgroundPicker = () => {
   showBackgroundPicker.value = !showBackgroundPicker.value
@@ -451,19 +453,28 @@ const removeBackground = async () => {
   }
 }
 
-const backgroundStyle = computed(() => {
+const headerStyle = computed(() => {
+  const styles = {
+    height: headerHeight.value + 'px'
+  }
   if (currentBackground.value) {
-    return {
-      backgroundImage: `url(${currentBackground.value})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat'
-    }
+    styles.backgroundImage = `url(${currentBackground.value})`
+    styles.backgroundSize = 'cover'
+    styles.backgroundPosition = 'center'
+    styles.backgroundRepeat = 'no-repeat'
+  } else {
+    styles.background = 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)'
   }
-  return {
-    background: 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)'
-  }
+  return styles
 })
+
+const handleScroll = (event) => {
+  const scrollTop = event.target.scrollTop
+  const minHeight = 120
+  const maxHeight = 300
+  const newHeight = Math.max(minHeight, maxHeight - scrollTop * 0.5)
+  headerHeight.value = newHeight
+}
 
 const openEditModal = () => {
   const user = userStore.user
@@ -736,9 +747,12 @@ onMounted(() => {
 }
 
 .profile-header-section {
-  padding: 40px 60px;
+  padding: 20px 60px;
+  padding-bottom: 30px;
   position: relative;
   cursor: pointer;
+  overflow: hidden;
+  transition: height 0.1s ease-out;
 }
 
 .profile-header-section::after {
