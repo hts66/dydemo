@@ -412,6 +412,17 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.profile-header-section::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.9));
+  pointer-events: none;
+}
+
 .background-hint {
   position: absolute;
   bottom: 20px;
@@ -436,6 +447,8 @@ onMounted(() => {
   display: flex;
   gap: 24px;
   align-items: flex-start;
+  position: relative;
+  z-index: 1;
 }
 
 .avatar-wrapper {
@@ -469,6 +482,7 @@ onMounted(() => {
   font-weight: bold;
   color: #fff;
   margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .profile-follow-btn {
@@ -510,17 +524,20 @@ onMounted(() => {
   font-size: 18px;
   font-weight: bold;
   color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 .stat-label {
   font-size: 13px;
-  color: #888;
+  color: #ddd;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .user-bio {
   font-size: 14px;
-  color: #aaa;
+  color: #ddd;
   margin: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .tabs-bar {
