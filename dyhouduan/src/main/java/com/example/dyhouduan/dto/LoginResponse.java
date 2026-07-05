@@ -22,5 +22,6 @@ public class LoginResponse {
         private Integer gender;
         private String bio;
         private String avatar;
+        private String background;
     }
 }

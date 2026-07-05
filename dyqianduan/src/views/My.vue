@@ -430,8 +430,10 @@ const handleBackgroundUpload = async (event) => {
     if (result.code === 200) {
       currentBackground.value = result.data
       previewBackground.value = result.data
-      userStore.user.background = result.data
-      await updateBackground(result.data)
+      const updateResult = await updateBackground(result.data)
+      if (updateResult.code === 200) {
+        userStore.setUser(updateResult.data)
+      }
     }
   } catch (err) {
     console.error('上传背景图片失败', err)

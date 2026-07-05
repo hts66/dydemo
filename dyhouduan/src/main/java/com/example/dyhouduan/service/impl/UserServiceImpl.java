@@ -57,7 +57,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 user.getUsername(),
                 user.getGender(),
                 user.getBio(),
-                user.getAvatar()
+                user.getAvatar(),
+                user.getBackground()
         );
 
         return new LoginResponse(token, refreshToken, userVO);
