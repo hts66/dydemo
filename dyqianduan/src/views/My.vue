@@ -2,7 +2,7 @@
   <div class="my-container">
     <div 
       class="profile-header-section"
-      :style="{ background: currentBackground }"
+      :style="backgroundStyle"
       @click="toggleBackgroundPicker"
     >
       <button class="logout-btn" v-if="userStore.isLoggedIn" @click.stop="handleLogout">退出登录</button>
@@ -331,18 +331,28 @@
     <div v-if="showBackgroundPicker" class="background-modal" @click.self="toggleBackgroundPicker">
       <div class="background-modal-content">
         <div class="background-modal-header">
-          <h3>选择背景颜色</h3>
+          <h3>上传背景图片</h3>
           <button class="close-btn" @click="toggleBackgroundPicker">✕</button>
         </div>
-        <div class="background-colors">
-          <div 
-            v-for="color in backgroundColors" 
-            :key="color"
-            class="color-item"
-            :class="{ active: currentBackground === color }"
-            :style="{ background: color }"
-            @click="selectBackground(color)"
-          ></div>
+        <div class="background-upload-area">
+          <input 
+            type="file" 
+            ref="backgroundFileInput"
+            accept="image/*"
+            class="background-file-input"
+            @change="handleBackgroundUpload"
+          />
+          <div class="upload-placeholder" @click="triggerBackgroundUpload">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="#888">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            <p>点击上传背景图片</p>
+            <p class="upload-hint">支持 jpg、png、gif 格式</p>
+          </div>
+          <div v-if="previewBackground" class="background-preview">
+            <img :src="previewBackground" />
+            <button class="remove-bg-btn" @click="removeBackground">移除背景</button>
+          </div>
         </div>
       </div>
     </div>
@@ -350,7 +360,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getWorks, deleteWork } from '../api/work'
@@ -390,35 +400,68 @@ const editForm = ref({
   avatar: '',
 })
 
-const currentBackground = ref('linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)')
+const currentBackground = ref('')
 const showBackgroundPicker = ref(false)
-const backgroundColors = [
-  'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)',
-  'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-  'linear-gradient(135deg, #0f3460 0%, #533483 100%)',
-  'linear-gradient(135deg, #e94560 0%, #ff6b6b 100%)',
-  'linear-gradient(135deg, #ff8e53 0%, #feca57 100%)',
-  'linear-gradient(135deg, #48dbfb 0%, #1dd1a1 100%)',
-  'linear-gradient(135deg, #5f27cd 0%, #a855f7 100%)',
-  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-]
+const backgroundFileInput = ref(null)
+const previewBackground = ref('')
 
 const toggleBackgroundPicker = () => {
   showBackgroundPicker.value = !showBackgroundPicker.value
-}
-
-const selectBackground = async (color) => {
-  currentBackground.value = color
-  showBackgroundPicker.value = false
-  try {
-    const result = await updateBackground(color)
-    if (result.code === 200) {
-      userStore.user.background = color
-    }
-  } catch (err) {
-    console.error('更新背景失败', err)
+  if (showBackgroundPicker.value && currentBackground.value) {
+    previewBackground.value = currentBackground.value
+  } else {
+    previewBackground.value = ''
   }
 }
+
+const triggerBackgroundUpload = () => {
+  backgroundFileInput.value?.click()
+}
+
+const handleBackgroundUpload = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const result = await request.post('/upload/background', formData)
+    if (result.code === 200) {
+      currentBackground.value = result.data
+      previewBackground.value = result.data
+      userStore.user.background = result.data
+      await updateBackground(result.data)
+    }
+  } catch (err) {
+    console.error('上传背景图片失败', err)
+  }
+}
+
+const removeBackground = async () => {
+  currentBackground.value = ''
+  previewBackground.value = ''
+  userStore.user.background = ''
+  try {
+    await updateBackground('')
+  } catch (err) {
+    console.error('移除背景失败', err)
+  }
+}
+
+const backgroundStyle = computed(() => {
+  if (currentBackground.value) {
+    return {
+      backgroundImage: `url(${currentBackground.value})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
+    }
+  }
+  return {
+    background: 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)'
+  }
+})
 
 const openEditModal = () => {
   const user = userStore.user
@@ -1401,29 +1444,67 @@ onMounted(() => {
   margin: 0;
 }
 
-.background-colors {
-  display: flex;
-  flex-wrap: wrap;
+.background-upload-area {
   padding: 20px;
-  gap: 16px;
+}
+
+.background-file-input {
+  display: none;
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-}
-
-.color-item {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
+  padding: 40px;
+  border: 2px dashed #444;
+  border-radius: 12px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  border: 2px solid transparent;
+  transition: all 0.2s;
 }
 
-.color-item:hover {
-  transform: scale(1.1);
+.upload-placeholder:hover {
+  border-color: #fe2c55;
+  background: rgba(254, 44, 85, 0.1);
 }
 
-.color-item.active {
-  border-color: #fff;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+.upload-placeholder p {
+  color: #888;
+  margin: 8px 0 0 0;
+  font-size: 14px;
+}
+
+.upload-hint {
+  font-size: 12px !important;
+  color: #666 !important;
+}
+
+.background-preview {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.background-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.remove-bg-btn {
+  margin-top: 12px;
+  padding: 8px 24px;
+  background: #444;
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.remove-bg-btn:hover {
+  background: #555;
 }
 </style>

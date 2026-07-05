@@ -75,6 +75,22 @@ public class UploadController {
         }
     }
 
+    @PostMapping("/background")
+    public Response<String> uploadBackground(@RequestParam("file") MultipartFile file) {
+        try {
+            String url;
+            if (useOss()) {
+                url = ossUtil.uploadFile(file, "backgrounds");
+            } else {
+                url = fileStorageUtil.uploadFile(file, "backgrounds");
+            }
+            return Response.success(url);
+        } catch (Exception e) {
+            log.error("上传背景图片失败", e);
+            return Response.error("上传背景图片失败: " + e.getMessage());
+        }
+    }
+
     @PostMapping("/file")
     public Response<String> uploadFile(@RequestParam("file") MultipartFile file) {
         try {

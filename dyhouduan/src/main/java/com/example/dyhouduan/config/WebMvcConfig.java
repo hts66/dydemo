@@ -48,6 +48,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/api/comments/**",
                     "/api/users/**",
                     "/api/follows/**",
+                    "/api/upload/**",
                     "/error"
                 );
     }
