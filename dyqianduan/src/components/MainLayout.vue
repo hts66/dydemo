@@ -98,48 +98,81 @@
     </main>
 
     <!-- 聊天窗口 -->
-    <div class="chat-window" v-show="showChat">
-      <div class="chat-header">
-        <div class="chat-user-info">
-          <img :src="currentChatFriend?.avatar || defaultAvatar" />
-          <span class="chat-username">{{ currentChatFriend?.username }}</span>
+    <div class="chat-panel" v-show="showChat">
+      <div class="chat-sidebar">
+        <div class="chat-sidebar-header">
+          <span>消息</span>
+          <button class="close-chat-btn" @click="closeChat">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
         </div>
-        <button class="close-chat-btn" @click="closeChat">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-          </svg>
-        </button>
-      </div>
-      <div class="chat-messages" ref="chatMessagesRef">
-        <div 
-          v-for="msg in chatMessages" 
-          :key="msg.id" 
-          class="chat-message"
-          :class="{ 'sent': msg.senderId === userStore.user?.id }"
-        >
-          <img :src="msg.senderId === userStore.user?.id ? (userStore.user?.avatar || defaultAvatar) : (msg.senderAvatar || defaultAvatar)" class="msg-avatar" />
-          <div class="msg-content">
-            <span class="msg-text">{{ msg.content }}</span>
-            <span class="msg-time">{{ formatMsgTime(msg.createdAt) }}</span>
+        <div class="chat-sidebar-content">
+          <div v-if="friends.length === 0" class="no-friends">
+            <p>你还没有好友</p>
+            <p class="no-friends-hint">快去添加好友吧</p>
+          </div>
+          <div 
+            v-for="friend in friends" 
+            :key="friend.id" 
+            class="chat-sidebar-item"
+            :class="{ 'active': currentChatFriend?.id === friend.id }"
+            @click="openChat(friend)"
+          >
+            <img :src="friend.avatar || defaultAvatar" />
+            <span class="chat-sidebar-name">{{ friend.username }}</span>
           </div>
         </div>
-        <div v-if="chatMessages.length === 0" class="no-messages">
-          <p>暂无消息，开始聊天吧~</p>
-        </div>
       </div>
-      <div class="chat-input-area">
-        <input 
-          type="text" 
-          v-model="chatInput" 
-          class="chat-input" 
-          placeholder="发送消息..."
-          @keyup.enter="sendChatMessage"
-        />
-        <button class="send-msg-btn" @click="sendChatMessage" :disabled="!chatInput.trim()">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-          </svg>
-        </button>
+      <div class="chat-main">
+        <div class="chat-header" v-if="currentChatFriend">
+          <div class="chat-user-info">
+            <img :src="currentChatFriend?.avatar || defaultAvatar" />
+            <span class="chat-username">{{ currentChatFriend?.username }}</span>
+          </div>
+          <button class="chat-more-btn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="#888">
+              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="chat-messages" ref="chatMessagesRef">
+          <div v-if="!currentChatFriend" class="no-chat-selected">
+            <p>选择一个好友开始聊天</p>
+          </div>
+          <div v-else>
+            <div 
+              v-for="msg in chatMessages" 
+              :key="msg.id" 
+              class="chat-message"
+              :class="{ 'sent': msg.senderId === userStore.user?.id }"
+            >
+              <img :src="msg.senderId === userStore.user?.id ? (userStore.user?.avatar || defaultAvatar) : (msg.senderAvatar || defaultAvatar)" class="msg-avatar" />
+              <div class="msg-content">
+                <span class="msg-text">{{ msg.content }}</span>
+                <span class="msg-time">{{ formatMsgTime(msg.createdAt) }}</span>
+              </div>
+            </div>
+            <div v-if="chatMessages.length === 0" class="no-messages">
+              <p>暂无消息，开始聊天吧~</p>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-area" v-if="currentChatFriend">
+          <input 
+            type="text" 
+            v-model="chatInput" 
+            class="chat-input" 
+            placeholder="发送消息..."
+            @keyup.enter="sendChatMessage"
+          />
+          <button class="send-msg-btn" @click="sendChatMessage" :disabled="!chatInput.trim()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -559,19 +592,80 @@ const formatMsgTime = (dateStr) => {
   background: #e0264d;
 }
 
-.chat-window {
+.chat-panel {
   position: fixed;
-  bottom: 0;
+  top: 80px;
   right: 24px;
-  width: 360px;
+  width: 600px;
   height: 500px;
   background: #1a1a1a;
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   border: 1px solid #3a3a3a;
   display: flex;
-  flex-direction: column;
   z-index: 1000001;
+}
+
+.chat-sidebar {
+  width: 200px;
+  border-right: 1px solid #3a3a3a;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #3a3a3a;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: #2a2a2a;
+  border-radius: 16px 0 0 0;
+}
+
+.chat-sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.chat-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.chat-sidebar-item:hover {
+  background: #2a2a2a;
+}
+
+.chat-sidebar-item.active {
+  background: #fe2c55;
+}
+
+.chat-sidebar-item img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.chat-sidebar-name {
+  font-size: 13px;
+  color: #fff;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0 16px 16px 0;
 }
 
 .chat-header {
@@ -581,7 +675,7 @@ const formatMsgTime = (dateStr) => {
   padding: 12px 16px;
   border-bottom: 1px solid #3a3a3a;
   background: #2a2a2a;
-  border-radius: 16px 16px 0 0;
+  border-radius: 0 16px 0 0;
 }
 
 .chat-user-info {
@@ -601,6 +695,19 @@ const formatMsgTime = (dateStr) => {
   font-size: 14px;
   font-weight: 500;
   color: #fff;
+}
+
+.chat-more-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  transition: background 0.2s;
+}
+
+.chat-more-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
 }
 
 .close-chat-btn {
@@ -720,6 +827,25 @@ const formatMsgTime = (dateStr) => {
 .send-msg-btn:disabled {
   background: #555;
   cursor: not-allowed;
+}
+
+.no-chat-selected {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+  font-size: 14px;
+}
+
+.no-chat-selected p {
+  margin: 0;
+}
+
+.no-friends-hint {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px !important;
 }
 
 .page-content {
