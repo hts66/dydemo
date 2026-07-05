@@ -15,3 +15,7 @@ export const getFollowList = (userId) => {
 export const getFollowingWorks = (userId) => {
   return request.get(`/works/following/${userId}`)
 }
+
+export const getFriends = (userId) => {
+  return request.get(`/follows/friends/${userId}`)
+}

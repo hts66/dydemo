@@ -63,8 +63,29 @@
           </button>
         </div>
         <div class="top-actions">
-          <div class="user-avatar" v-if="userStore.isLoggedIn" @click="$router.push('/my')">
-            <img :src="userStore.user?.avatar || defaultAvatar" />
+          <div 
+            class="user-avatar-container" 
+            v-if="userStore.isLoggedIn"
+            @mouseenter="showFriendsPopup"
+            @mouseleave="hideFriendsPopup"
+          >
+            <div class="user-avatar" @click="$router.push('/my')">
+              <img :src="userStore.user?.avatar || defaultAvatar" />
+            </div>
+            <div class="friends-popup" v-show="showFriends">
+              <div class="friends-popup-header">
+                <span>好友列表</span>
+              </div>
+              <div class="friends-popup-content">
+                <div v-if="friends.length === 0" class="no-friends">
+                  <p>你还没有好友，快去添加吧</p>
+                </div>
+                <div v-for="friend in friends" :key="friend.id" class="friend-item" @click.stop="goToProfile(friend.id)">
+                  <img :src="friend.avatar || defaultAvatar" />
+                  <span class="friend-name">{{ friend.username }}</span>
+                </div>
+              </div>
+            </div>
           </div>
           <button v-else class="login-btn" @click="$router.push('/login')">登录</button>
         </div>
@@ -79,12 +100,18 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
+import { getFriends } from '../api/follow'
 
 const userStore = useUserStore()
 const router = useRouter()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+
+const showFriends = ref(false)
+const friends = ref([])
+let friendsTimeout = null
 
 const goToFriends = () => {
   console.log('朋友按钮被点击了')
@@ -98,6 +125,33 @@ const goToFollowing = () => {
 
 const showAiSearchTip = () => {
   alert('该功能尚未开发')
+}
+
+const goToProfile = (userId) => {
+  if (userId) {
+    router.push(`/profile/${userId}`)
+  }
+}
+
+const showFriendsPopup = async () => {
+  if (friendsTimeout) clearTimeout(friendsTimeout)
+  showFriends.value = true
+  if (friends.value.length === 0 && userStore.user?.id) {
+    try {
+      const result = await getFriends(userStore.user.id)
+      if (result.code === 200) {
+        friends.value = result.data
+      }
+    } catch (err) {
+      console.error('获取好友列表失败', err)
+    }
+  }
+}
+
+const hideFriendsPopup = () => {
+  friendsTimeout = setTimeout(() => {
+    showFriends.value = false
+  }, 200)
 }
 </script>
 
@@ -296,6 +350,13 @@ const showAiSearchTip = () => {
   color: #fff;
 }
 
+.user-avatar-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .user-avatar {
   width: 32px;
   height: 32px;
@@ -308,6 +369,68 @@ const showAiSearchTip = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.friends-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: #2a2a2a;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 1000000;
+  border: 1px solid #3a3a3a;
+}
+
+.friends-popup-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #3a3a3a;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.friends-popup-content {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.no-friends {
+  padding: 24px;
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+}
+
+.no-friends p {
+  margin: 0;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.friend-item:hover {
+  background: #3a3a3a;
+}
+
+.friend-item img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.friend-name {
+  font-size: 13px;
+  color: #fff;
 }
 
 .login-btn {
