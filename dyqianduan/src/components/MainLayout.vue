@@ -80,7 +80,7 @@
                 <div v-if="friends.length === 0" class="no-friends">
                   <p>你还没有好友，快去添加吧</p>
                 </div>
-                <div v-for="friend in friends" :key="friend.id" class="friend-item" @click.stop="goToProfile(friend.id)">
+                <div v-for="friend in friends" :key="friend.id" class="friend-item" @click.stop="openChat(friend)">
                   <img :src="friend.avatar || defaultAvatar" />
                   <span class="friend-name">{{ friend.username }}</span>
                 </div>
@@ -96,14 +96,61 @@
         <router-view :key="$route.fullPath" />
       </div>
     </main>
+
+    <!-- 聊天窗口 -->
+    <div class="chat-window" v-show="showChat">
+      <div class="chat-header">
+        <div class="chat-user-info">
+          <img :src="currentChatFriend?.avatar || defaultAvatar" />
+          <span class="chat-username">{{ currentChatFriend?.username }}</span>
+        </div>
+        <button class="close-chat-btn" @click="closeChat">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="chat-messages" ref="chatMessagesRef">
+        <div 
+          v-for="msg in chatMessages" 
+          :key="msg.id" 
+          class="chat-message"
+          :class="{ 'sent': msg.senderId === userStore.user?.id }"
+        >
+          <img :src="msg.senderId === userStore.user?.id ? (userStore.user?.avatar || defaultAvatar) : (msg.senderAvatar || defaultAvatar)" class="msg-avatar" />
+          <div class="msg-content">
+            <span class="msg-text">{{ msg.content }}</span>
+            <span class="msg-time">{{ formatMsgTime(msg.createdAt) }}</span>
+          </div>
+        </div>
+        <div v-if="chatMessages.length === 0" class="no-messages">
+          <p>暂无消息，开始聊天吧~</p>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <input 
+          type="text" 
+          v-model="chatInput" 
+          class="chat-input" 
+          placeholder="发送消息..."
+          @keyup.enter="sendChatMessage"
+        />
+        <button class="send-msg-btn" @click="sendChatMessage" :disabled="!chatInput.trim()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
 import { getFriends } from '../api/follow'
+import { getChatMessages, sendMessage } from '../api/message'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -112,6 +159,12 @@ const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726
 const showFriends = ref(false)
 const friends = ref([])
 let friendsTimeout = null
+
+const showChat = ref(false)
+const currentChatFriend = ref(null)
+const chatMessages = ref([])
+const chatInput = ref('')
+const chatMessagesRef = ref(null)
 
 const goToFriends = () => {
   console.log('朋友按钮被点击了')
@@ -125,12 +178,6 @@ const goToFollowing = () => {
 
 const showAiSearchTip = () => {
   alert('该功能尚未开发')
-}
-
-const goToProfile = (userId) => {
-  if (userId) {
-    router.push(`/profile/${userId}`)
-  }
 }
 
 const showFriendsPopup = async () => {
@@ -152,6 +199,70 @@ const hideFriendsPopup = () => {
   friendsTimeout = setTimeout(() => {
     showFriends.value = false
   }, 200)
+}
+
+const openChat = async (friend) => {
+  showFriends.value = false
+  currentChatFriend.value = friend
+  showChat.value = true
+  chatMessages.value = []
+  chatInput.value = ''
+  
+  if (userStore.user?.id) {
+    try {
+      const result = await getChatMessages(friend.id)
+      if (result.code === 200) {
+        chatMessages.value = result.data
+      }
+    } catch (err) {
+      console.error('获取聊天记录失败', err)
+    }
+  }
+  
+  await nextTick()
+  scrollToBottom()
+}
+
+const closeChat = () => {
+  showChat.value = false
+  currentChatFriend.value = null
+  chatMessages.value = []
+  chatInput.value = ''
+}
+
+const sendChatMessage = async () => {
+  if (!chatInput.value.trim() || !currentChatFriend.value || !userStore.user?.id) return
+  
+  try {
+    const result = await sendMessage(currentChatFriend.value.id, chatInput.value.trim())
+    if (result.code === 200) {
+      chatMessages.value.push({
+        ...result.data,
+        senderId: userStore.user.id,
+        senderUsername: userStore.user.username,
+        senderAvatar: userStore.user.avatar
+      })
+      chatInput.value = ''
+      await nextTick()
+      scrollToBottom()
+    }
+  } catch (err) {
+    console.error('发送消息失败', err)
+  }
+}
+
+const scrollToBottom = () => {
+  if (chatMessagesRef.value) {
+    chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
+  }
+}
+
+const formatMsgTime = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  return `${hours}:${minutes}`
 }
 </script>
 
@@ -446,6 +557,169 @@ const hideFriendsPopup = () => {
 
 .login-btn:hover {
   background: #e0264d;
+}
+
+.chat-window {
+  position: fixed;
+  bottom: 0;
+  right: 24px;
+  width: 360px;
+  height: 500px;
+  background: #1a1a1a;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid #3a3a3a;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000001;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #3a3a3a;
+  background: #2a2a2a;
+  border-radius: 16px 16px 0 0;
+}
+
+.chat-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-user-info img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.chat-username {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.close-chat-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  transition: background 0.2s;
+}
+
+.close-chat-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.no-messages {
+  padding: 24px;
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+}
+
+.no-messages p {
+  margin: 0;
+}
+
+.chat-message {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  max-width: 100%;
+}
+
+.chat-message.sent {
+  flex-direction: row-reverse;
+}
+
+.msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 70%;
+}
+
+.chat-message.sent .msg-content {
+  align-items: flex-end;
+}
+
+.msg-text {
+  background: #2a2a2a;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  color: #fff;
+  word-break: break-word;
+}
+
+.chat-message.sent .msg-text {
+  background: #fe2c55;
+}
+
+.msg-time {
+  font-size: 11px;
+  color: #888;
+}
+
+.chat-input-area {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid #3a3a3a;
+  background: #2a2a2a;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: #3a3a3a;
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.chat-input::placeholder {
+  color: #888;
+}
+
+.send-msg-btn {
+  padding: 10px 14px;
+  background: #fe2c55;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.send-msg-btn:hover:not(:disabled) {
+  background: #e0264d;
+}
+
+.send-msg-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
 }
 
 .page-content {
