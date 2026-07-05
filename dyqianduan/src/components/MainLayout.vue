@@ -9,7 +9,7 @@
           </svg>
           <span>精选</span>
         </div>
-        <div class="nav-item" @click="showRecommendTip">
+        <div class="nav-item" :class="{ active: $route.path === '/recommend' }" @click="$router.push('/recommend')">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
           </svg>
@@ -94,10 +94,6 @@ const goToFriends = () => {
 const goToFollowing = () => {
   console.log('关注按钮被点击了')
   router.push('/following')
-}
-
-const showRecommendTip = () => {
-  alert('该功能尚未开发')
 }
 
 const showAiSearchTip = () => {

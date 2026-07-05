@@ -10,7 +10,14 @@ const router = createRouter({
     },
     {
       path: '/recommend',
-      redirect: '/featured',
+      component: MainLayout,
+      children: [
+        {
+          path: '',
+          name: 'Recommend',
+          component: () => import('../views/Recommend.vue'),
+        },
+      ],
     },
     {
       path: '/featured',
@@ -72,7 +79,7 @@ const router = createRouter({
       component: () => import('../views/ForgotPassword.vue'),
     },
     {
-      path: '/profile',
+      path: '/profile/:userId',
       name: 'Profile',
       component: () => import('../views/Profile.vue'),
     },

@@ -27,6 +27,8 @@ public class User {
 
     private String avatar;
 
+    private String background;
+
     private Integer followersCount;
 
     private Integer followingCount;

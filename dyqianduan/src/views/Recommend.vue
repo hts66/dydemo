@@ -12,9 +12,9 @@
             <div class="loading-spinner"></div>
             <span class="loading-text">加载中...</span>
           </div>
-          <img 
-            v-if="!videoLoaded[index]" 
-            :src="work.thumbnail || work.url.replace('/videos/', '/images/').replace('.mp4', '.jpg')" 
+          <img
+            v-if="!videoLoaded[index]"
+            :src="work.thumbnail || work.url.replace('/videos/', '/images/').replace('.mp4', '.jpg')"
             class="video-placeholder"
           />
           <video
@@ -57,7 +57,10 @@
         <div class="right-actions">
           <button class="follow-btn" :class="{ followed: work.isFollowing }" @click.stop="handleFollow(work)">
             <img :src="work.avatar || defaultAvatar" />
-            <svg v-if="!work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
+            <svg v-if="work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="#fff">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
             </svg>
           </button>
@@ -127,8 +130,12 @@
       </div>
     </div>
 
-    <div v-if="works.length === 0 && !isLoading" class="empty-state">
-      <p>你还没有关注任何人，去探索吧</p>
+    <div v-if="isLoading && works.length === 0" class="empty-state">
+      <div class="loading-spinner"></div>
+      <p>正在为你挑选精彩内容...</p>
+    </div>
+    <div v-else-if="works.length === 0" class="empty-state">
+      <p>暂无推荐内容，去发布第一个视频吧</p>
     </div>
   </div>
 </template>
@@ -137,7 +144,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getFollowingWorks } from '../api/work'
+import { getRecommendWorks, recordWatchHistory } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { toggleFollow, checkIsFollowing } from '../api/follow'
@@ -160,6 +167,10 @@ const isLoading = ref(false)
 const isAnimating = ref(false)
 const offsetY = ref(0)
 const isUnmounted = ref(false)
+
+const currentPage = ref(1)
+const hasMore = ref(true)
+const pageSize = 10
 
 let touchStartY = 0
 let touchStartX = 0
@@ -188,12 +199,12 @@ const getProxyUrl = (url) => {
 }
 
 const loadWorks = async () => {
-  if (isLoading.value) return
+  if (isLoading.value || !hasMore.value) return
   isLoading.value = true
   try {
-    const userId = userStore.user?.id || 1
-    const result = await getFollowingWorks(userId)
+    const result = await getRecommendWorks(currentPage.value, pageSize)
     if (result.code === 200 && result.data.length > 0) {
+      const isFirstLoad = works.value.length === 0
       const newWorks = []
       for (const work of result.data) {
         const newWork = { ...work }
@@ -202,21 +213,33 @@ const loadWorks = async () => {
         newWork.commentsCount = newWork.commentsCount || newWork.comments_count || 0
         newWork.createdAt = newWork.createdAt || newWork.created_at
         newWork.isLiked = false
-        newWork.isFollowing = true
-        try {
-          const likeResult = await checkIsLiked(newWork.id)
-          if (likeResult.code === 200) newWork.isLiked = likeResult.data
-        } catch (e) {}
+        newWork.isFollowing = false
+        if (userStore.isLoggedIn) {
+          try {
+            const [likeResult, followResult] = await Promise.all([
+              checkIsLiked(newWork.id),
+              newWork.userId ? checkIsFollowing(newWork.userId) : Promise.resolve(null)
+            ])
+            if (likeResult && likeResult.code === 200) newWork.isLiked = likeResult.data
+            if (followResult && followResult.code === 200) newWork.isFollowing = followResult.data
+          } catch (e) {}
+        }
         newWorks.push(newWork)
       }
       works.value.push(...newWorks)
-      if (works.value.length === newWorks.length) {
+      currentPage.value++
+      if (result.data.length < pageSize) {
+        hasMore.value = false
+      }
+      if (isFirstLoad) {
         await nextTick()
         playCurrentVideo()
       }
+    } else {
+      hasMore.value = false
     }
   } catch (err) {
-    console.error('加载视频失败', err)
+    console.error('加载推荐视频失败', err)
   } finally {
     isLoading.value = false
   }
@@ -261,6 +284,13 @@ const playCurrentVideo = async () => {
       }, { once: true })
     }
   }
+  reportWatch()
+}
+
+const reportWatch = () => {
+  const work = works.value[currentIndex.value]
+  if (!work || !userStore.isLoggedIn) return
+  recordWatchHistory({ workId: work.id, watchDuration: 0, isComplete: false }).catch(() => {})
 }
 
 const onVideoLoaded = (index) => {
@@ -356,6 +386,8 @@ const switchVideo = (direction) => {
   const newIndex = currentIndex.value + direction
   if (newIndex < 0 || newIndex >= works.value.length) {
     animateOffsetTo(0)
+    // 滑到底部时尝试加载更多推荐
+    if (direction > 0) loadWorks()
     return
   }
   isAnimating.value = true
@@ -365,6 +397,8 @@ const switchVideo = (direction) => {
     currentIndex.value = newIndex
     isAnimating.value = false
     playCurrentVideo()
+    // 临近末尾时预加载下一页
+    if (newIndex >= works.value.length - 2) loadWorks()
   })
 }
 
@@ -427,12 +461,10 @@ const handleFollow = async (work) => {
   try {
     const result = await toggleFollow(followeeId)
     if (result.code === 200) {
-      if (!result.data) {
-        works.value = works.value.filter(w => w.userId !== work.userId)
-        if (currentIndex.value >= works.value.length) {
-          currentIndex.value = Math.max(0, works.value.length - 1)
-        }
-      }
+      // 同步更新同一作者的所有卡片关注态
+      works.value.forEach(w => {
+        if (w.userId === followeeId) w.isFollowing = result.data
+      })
     }
   } catch (err) {
     console.error('关注失败', err)
@@ -703,6 +735,7 @@ onUnmounted(() => {
 
 .follow-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: transparent;
@@ -712,7 +745,7 @@ onUnmounted(() => {
   margin: 0;
   position: relative;
   width: 50px;
-  height: 50px;
+  height: 60px;
   z-index: 100000;
 }
 
@@ -729,15 +762,17 @@ onUnmounted(() => {
 }
 
 .follow-btn svg {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 18px;
-  height: 18px;
+  margin-top: -6px;
+  width: 20px;
+  height: 20px;
   background: #fe2c55;
   border-radius: 50%;
   padding: 3px;
   border: 2px solid rgba(0, 0, 0, 0.5);
+}
+
+.follow-btn.followed svg {
+  background: #2ecc71;
 }
 
 .follow-btn:hover {
@@ -911,6 +946,10 @@ onUnmounted(() => {
   transform: translate(-50%, -50%);
   text-align: center;
   color: #666;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
 .empty-state p {

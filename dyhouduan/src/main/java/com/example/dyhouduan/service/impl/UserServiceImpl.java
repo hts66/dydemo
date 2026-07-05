@@ -129,4 +129,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         this.updateById(user);
         return user;
     }
+
+    @Override
+    public User updateBackground(Long userId, String background) {
+        User user = this.getById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        user.setBackground(background);
+        this.updateById(user);
+        return user;
+    }
 }

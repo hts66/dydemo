@@ -1,150 +1,176 @@
-<template>
-  <div class="profile-container">
-    <header class="profile-header">
-      <div class="header-left">
-        <h1 class="logo">🎵 短视频</h1>
+﻿<template>
+  <div class="my-container">
+    <div 
+      class="profile-header-section"
+      :style="{ background: currentBackground }"
+      @click="toggleBackgroundPicker"
+    >
+      <div class="background-hint">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+          <path d="M20.71 4.04a1 1 0 0 0-1.42 0l-3.02 3.02-7.19-7.19a1 1 0 0 0-1.42 0L3.29 5.36a1 1 0 0 0 0 1.42l7.19 7.19-3.02 3.02a1 1 0 0 0 0 1.42l2.12 2.12a1 1 0 0 0 1.42 0l3.02-3.02 7.19 7.19a1 1 0 0 0 1.42 0l2.12-2.12a1 1 0 0 0 0-1.42l-7.19-7.19 3.02-3.02a1 1 0 0 0 0-1.42z"/>
+        </svg>
+        <span>点击更换背景</span>
       </div>
-      <div class="header-right" v-if="userStore.isLoggedIn">
-        <router-link to="/" class="home-link">首页</router-link>
-        <button class="logout-btn" @click="handleLogout">退出登录</button>
-      </div>
-      <div class="header-right" v-else>
-        <router-link to="/login" class="login-btn">登录</router-link>
-        <router-link to="/register" class="register-btn">注册</router-link>
-      </div>
-    </header>
-
-    <main class="profile-main" v-if="userStore.isLoggedIn">
-      <div class="profile-card">
-        <h2 class="card-title">个人资料</h2>
-        
-        <div class="avatar-section">
-          <div class="avatar-wrapper" @click="triggerUpload">
-            <img 
-              :src="pendingAvatarUrl || userStore.user?.avatar || defaultAvatar" 
-              alt="头像" 
-              class="avatar-img"
-            />
-            <div class="avatar-overlay">
-              <span class="upload-icon">📷</span>
-              <span class="upload-text">{{ pendingAvatarUrl ? '更换头像' : '点击更换头像' }}</span>
-            </div>
-          </div>
-          <input 
-            type="file" 
-            ref="fileInput" 
-            accept="image/*" 
-            @change="handleFileChange" 
-            class="hidden-input"
-          />
-          <div v-if="pendingAvatarUrl" class="avatar-actions">
-            <button class="cancel-avatar-btn" @click="cancelAvatarChange">取消</button>
-          </div>
+      <div class="profile-info" @click.stop>
+        <div class="avatar-wrapper">
+          <img :src="targetUser?.avatar || defaultAvatar" class="avatar-img" />
         </div>
-
-        <div class="stats-section">
-          <div class="stat-item" @click="showFollowList('following')">
-            <span class="stat-number">{{ followingCount }}</span>
-            <span class="stat-label">关注</span>
-          </div>
-          <div class="stat-item" @click="showFollowList('followers')">
-            <span class="stat-number">{{ followerCount }}</span>
-            <span class="stat-label">粉丝</span>
-          </div>
-        </div>
-
-        <div class="form-section">
-          <div class="form-group">
-            <label>邮箱</label>
-            <input 
-              type="email" 
-              v-model="form.email" 
-              class="form-input" 
-              disabled
-            />
-          </div>
-
-          <div class="form-group">
-            <label>用户名</label>
-            <input 
-              type="text" 
-              v-model="form.username" 
-              class="form-input"
-              placeholder="请输入用户名"
-            />
-          </div>
-
-          <div class="form-group">
-            <label>性别</label>
-            <div class="gender-options">
-              <label class="gender-option">
-                <input type="radio" v-model="form.gender" :value="0" />
-                <span>未知</span>
-              </label>
-              <label class="gender-option">
-                <input type="radio" v-model="form.gender" :value="1" />
-                <span>男</span>
-              </label>
-              <label class="gender-option">
-                <input type="radio" v-model="form.gender" :value="2" />
-                <span>女</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>个人简介</label>
-            <textarea 
-              v-model="form.bio" 
-              class="form-textarea"
-              placeholder="介绍一下自己..."
-              rows="4"
-            ></textarea>
-          </div>
-
-          <button class="save-btn" @click="handleSave" :disabled="saving">
-            {{ saving ? '保存中...' : '保存修改' }}
-          </button>
-
-          <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
-          <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-        </div>
-      </div>
-    </main>
-
-    <main class="profile-main" v-else>
-      <div class="not-login">
-        <h2>请先登录</h2>
-        <router-link to="/login" class="login-link">去登录</router-link>
-      </div>
-    </main>
-
-    <!-- 关注/粉丝列表弹窗 -->
-    <div v-if="showFollowModal" class="follow-modal" @click.self="closeFollowModal">
-      <div class="follow-modal-content">
-        <div class="follow-modal-header">
-          <h3>{{ followModalTitle }}</h3>
-          <button class="close-btn" @click="closeFollowModal">✕</button>
-        </div>
-        <div class="follow-list">
-          <div v-for="user in followList" :key="user.id" class="follow-item">
-            <img :src="user.avatar || defaultAvatar" class="follow-avatar" />
-            <div class="follow-info">
-              <span class="follow-name">{{ user.username || '匿名用户' }}</span>
-              <span class="follow-bio">{{ user.bio || '这个人很懒，什么都没写~' }}</span>
-            </div>
+        <div class="user-details">
+          <div class="username-row">
+            <h2 class="username">{{ targetUser?.username || '用户' }}</h2>
             <button 
-              v-if="user.id !== userStore.user?.id"
-              class="follow-action-btn"
-              :class="{ following: user.isFollowing }"
-              @click="handleFollow(user.id, user)"
+              v-if="!isOwnProfile && userStore.isLoggedIn"
+              class="profile-follow-btn"
+              :class="{ followed: isFollowingTarget }"
+              @click.stop="handleFollowTarget"
             >
-              {{ user.isFollowing ? '已关注' : '关注' }}
+              {{ isFollowingTarget ? '已关注' : '+ 关注' }}
             </button>
           </div>
-          <div v-if="followList.length === 0" class="empty-follow">
-            <p>暂无{{ followModalTitle === '关注' ? '关注' : '粉丝' }}</p>
+          <div class="stats-row">
+            <div class="stat-item">
+              <span class="stat-num">{{ followingCount }}</span>
+              <span class="stat-label">关注</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-num">{{ followerCount }}</span>
+              <span class="stat-label">粉丝</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-num">{{ worksCount }}</span>
+              <span class="stat-label">获赞</span>
+            </div>
           </div>
+          <p class="user-bio">{{ targetUser?.bio || '这个人很懒，什么都没写~' }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs-bar">
+      <div 
+        class="tab-item" 
+        :class="{ active: activeTab === 'works' }"
+        @click="handleTabClick('works')"
+      >
+        作品 {{ targetWorks.length }}
+      </div>
+      <div 
+        class="tab-item" 
+        :class="{ active: activeTab === 'following' }"
+        @click="handleTabClick('following')"
+      >
+        关注
+      </div>
+      <div 
+        class="tab-item" 
+        :class="{ active: activeTab === 'followers' }"
+        @click="handleTabClick('followers')"
+      >
+        粉丝
+      </div>
+    </div>
+
+    <div class="tab-content">
+      <div v-if="activeTab === 'works'" class="works-grid">
+        <div 
+          v-for="work in targetWorks" 
+          :key="work.id"
+          class="work-card"
+          @click="openVideo(work)"
+        >
+          <div class="work-thumbnail">
+            <img :src="work.thumbnail || work.url" />
+            <div class="play-overlay">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="work-info">
+            <span class="work-title">{{ work.title || '无标题' }}</span>
+            <div class="work-stats">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="#fe2c55">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              {{ formatCount(work.likesCount) }}
+            </div>
+          </div>
+        </div>
+        <div v-if="targetWorks.length === 0" class="empty-state">
+          <p>还没有发布作品</p>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'following'" class="user-list">
+        <div 
+          v-for="user in followingList" 
+          :key="user.id" 
+          class="user-item"
+          @click="goToProfile(user.id)"
+        >
+          <img :src="user.avatar || defaultAvatar" class="user-avatar" />
+          <div class="user-info">
+            <span class="user-name">{{ user.username || '匿名用户' }}</span>
+            <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
+          </div>
+        </div>
+        <div v-if="followingList.length === 0" class="empty-state">
+          <p>还没有关注任何人</p>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'followers'" class="user-list">
+        <div 
+          v-for="user in followerList" 
+          :key="user.id" 
+          class="user-item"
+          @click="goToProfile(user.id)"
+        >
+          <img :src="user.avatar || defaultAvatar" class="user-avatar" />
+          <div class="user-info">
+            <span class="user-name">{{ user.username || '匿名用户' }}</span>
+            <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
+          </div>
+        </div>
+        <div v-if="followerList.length === 0" class="empty-state">
+          <p>还没有粉丝</p>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="currentVideo" class="video-modal" @click.self="closeVideo">
+      <div class="modal-content">
+        <button class="close-btn" @click="closeVideo">✕</button>
+        <video
+          ref="videoPlayer"
+          :src="currentVideo.url"
+          :poster="currentVideo.thumbnail"
+          class="modal-video"
+          controls
+          autoplay
+        ></video>
+        <div class="video-info-overlay">
+          <h3>{{ currentVideo.title }}</h3>
+          <p>{{ currentVideo.description }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showBackgroundPicker" class="background-modal" @click.self="toggleBackgroundPicker">
+      <div class="background-modal-content">
+        <div class="background-modal-header">
+          <h3>选择背景颜色</h3>
+          <button class="close-btn" @click="toggleBackgroundPicker">✕</button>
+        </div>
+        <div class="background-colors">
+          <div 
+            v-for="color in backgroundColors" 
+            :key="color"
+            class="color-item"
+            :class="{ active: currentBackground === color }"
+            :style="{ background: color }"
+            @click="selectBackground(color)"
+          ></div>
         </div>
       </div>
     </div>
@@ -152,65 +178,125 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { uploadAvatar, cleanupFiles } from '../api/upload'
+import { getWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
+import { getUserById, updateBackground } from '../api/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
-
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
-const fileInput = ref(null)
-const saving = ref(false)
-const successMessage = ref('')
-const errorMessage = ref('')
+const activeTab = ref('works')
+const targetUser = ref(null)
+const targetWorks = ref([])
+const followingList = ref([])
+const followerList = ref([])
 const followingCount = ref(0)
 const followerCount = ref(0)
-const showFollowModal = ref(false)
-const followModalTitle = ref('')
-const followList = ref([])
+const worksCount = ref(0)
+const isFollowingTarget = ref(false)
+const currentVideo = ref(null)
+const videoPlayer = ref(null)
 
-const pendingAvatarFile = ref(null)
-const pendingAvatarUrl = ref('')
-
-const form = reactive({
-  email: '',
-  username: '',
-  gender: 0,
-  bio: '',
+const isOwnProfile = computed(() => {
+  return userStore.user && targetUser.value && userStore.user.id === targetUser.value.id
 })
 
-onMounted(() => {
-  if (userStore.user) {
-    form.email = userStore.user.email || ''
-    form.username = userStore.user.username || ''
-    form.gender = userStore.user.gender || 0
-    form.bio = userStore.user.bio || ''
-    loadFollowCounts()
+const currentBackground = ref('linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)')
+const showBackgroundPicker = ref(false)
+const backgroundColors = [
+  'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)',
+  'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+  'linear-gradient(135deg, #0f3460 0%, #533483 100%)',
+  'linear-gradient(135deg, #e94560 0%, #ff6b6b 100%)',
+  'linear-gradient(135deg, #ff8e53 0%, #feca57 100%)',
+  'linear-gradient(135deg, #48dbfb 0%, #1dd1a1 100%)',
+  'linear-gradient(135deg, #5f27cd 0%, #a855f7 100%)',
+  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+]
+
+const toggleBackgroundPicker = () => {
+  if (isOwnProfile.value) {
+    showBackgroundPicker.value = !showBackgroundPicker.value
   }
-})
+}
 
-onUnmounted(() => {
-  if (pendingAvatarUrl.value) {
-    URL.revokeObjectURL(pendingAvatarUrl.value)
-  }
-})
-
-onBeforeRouteLeave(() => {
-  if (pendingAvatarUrl.value) {
-    URL.revokeObjectURL(pendingAvatarUrl.value)
-    pendingAvatarUrl.value = ''
-    pendingAvatarFile.value = null
-  }
-})
-
-const loadFollowCounts = async () => {
+const selectBackground = async (color) => {
+  currentBackground.value = color
+  showBackgroundPicker.value = false
   try {
-    const result = await getFollowList(userStore.user.id)
+    const result = await updateBackground(color)
     if (result.code === 200) {
+      userStore.user.background = color
+    }
+  } catch (err) {
+    console.error('更新背景失败', err)
+  }
+}
+
+const loadUserProfile = async () => {
+  const userId = parseInt(route.params.userId)
+  
+  if (!userId) {
+    if (userStore.user) {
+      targetUser.value = userStore.user
+      loadWorks()
+      loadFollowData()
+      if (userStore.user?.background) {
+        currentBackground.value = userStore.user.background
+      }
+    }
+    return
+  }
+  
+  try {
+    const result = await getUserById(userId)
+    if (result.code === 200) {
+      targetUser.value = result.data
+      loadWorks()
+      loadFollowData()
+      
+      if (targetUser.value.background) {
+        currentBackground.value = targetUser.value.background
+      }
+      
+      if (userStore.user && userStore.user.id !== userId) {
+        const followResult = await checkIsFollowing(userId)
+        if (followResult.code === 200) {
+          isFollowingTarget.value = followResult.data
+        }
+      }
+    }
+  } catch (err) {
+    console.error('加载用户资料失败', err)
+  }
+}
+
+const loadWorks = async () => {
+  if (!targetUser.value) return
+  try {
+    const result = await getWorks(1, 100)
+    if (result.code === 200) {
+      targetWorks.value = result.data.filter(w => w.userId === targetUser.value.id)
+      worksCount.value = targetWorks.value.reduce((sum, w) => sum + (w.likesCount || 0), 0)
+    }
+  } catch (err) {
+    console.error('加载作品失败', err)
+  }
+}
+
+const loadFollowData = async () => {
+  if (!targetUser.value) return
+  try {
+    const userId = targetUser.value.id
+    const result = await getFollowList(userId)
+    if (result.code === 200) {
+      followingList.value = result.data.following
+      followerList.value = result.data.followers
       followingCount.value = result.data.following.length
       followerCount.value = result.data.followers.length
     }
@@ -219,48 +305,17 @@ const loadFollowCounts = async () => {
   }
 }
 
-const showFollowList = async (type) => {
-  followModalTitle.value = type === 'following' ? '关注' : '粉丝'
-  showFollowModal.value = true
+const handleFollowTarget = async () => {
+  if (!targetUser.value) return
   
   try {
-    const result = await getFollowList(userStore.user.id)
+    const result = await toggleFollow(targetUser.value.id)
     if (result.code === 200) {
-      const list = type === 'following' ? result.data.following : result.data.followers
-      // 为每个用户添加关注状态
-      for (const user of list) {
-        if (user.id !== userStore.user.id) {
-          try {
-            const followResult = await checkIsFollowing(user.id)
-            if (followResult.code === 200) {
-              user.isFollowing = followResult.data
-            } else {
-              user.isFollowing = false
-            }
-          } catch (e) {
-            user.isFollowing = false
-          }
-        } else {
-          user.isFollowing = false
-        }
-      }
-      followList.value = list
-    }
-  } catch (err) {
-    console.error('加载列表失败', err)
-  }
-}
-
-const handleFollow = async (userId, user) => {
-  try {
-    const result = await toggleFollow(userId)
-    if (result.code === 200) {
-      user.isFollowing = result.data
-      // 更新计数
+      isFollowingTarget.value = result.data
       if (result.data) {
-        followingCount.value++
+        followerCount.value++
       } else {
-        followingCount.value--
+        followerCount.value--
       }
     }
   } catch (err) {
@@ -268,238 +323,84 @@ const handleFollow = async (userId, user) => {
   }
 }
 
-const closeFollowModal = () => {
-  showFollowModal.value = false
-  followList.value = []
+const goToProfile = (userId) => {
+  router.push(`/profile/${userId}`)
 }
 
-const triggerUpload = () => {
-  fileInput.value.click()
+const openVideo = (work) => {
+  currentVideo.value = work
+  document.body.style.overflow = 'hidden'
 }
 
-const handleFileChange = (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-
-  if (!file.type.startsWith('image/')) {
-    errorMessage.value = '请选择图片文件'
-    return
+const closeVideo = () => {
+  if (videoPlayer.value) {
+    videoPlayer.value.pause()
   }
-
-  if (file.size > 5 * 1024 * 1024) {
-    errorMessage.value = '图片大小不能超过5MB'
-    return
-  }
-
-  errorMessage.value = ''
-  successMessage.value = ''
-
-  if (pendingAvatarUrl.value) {
-    URL.revokeObjectURL(pendingAvatarUrl.value)
-  }
-
-  pendingAvatarFile.value = file
-  pendingAvatarUrl.value = URL.createObjectURL(file)
-
-  successMessage.value = '头像已选择，请点击保存修改确认'
-  setTimeout(() => {
-    successMessage.value = ''
-  }, 3000)
-
-  event.target.value = ''
+  currentVideo.value = null
+  document.body.style.overflow = ''
 }
 
-const cancelAvatarChange = () => {
-  if (pendingAvatarUrl.value) {
-    URL.revokeObjectURL(pendingAvatarUrl.value)
-    pendingAvatarUrl.value = ''
-    pendingAvatarFile.value = null
-  }
+const formatCount = (count) => {
+  if (!count) return '0'
+  if (count >= 10000) return (count / 10000).toFixed(1) + '万'
+  return count.toString()
 }
 
-const handleSave = async () => {
-  successMessage.value = ''
-  errorMessage.value = ''
-  
-  if (!form.username.trim()) {
-    errorMessage.value = '用户名不能为空'
-    return
-  }
-
-  saving.value = true
-
-  try {
-    const updateData = {
-      ...userStore.user,
-      username: form.username,
-      gender: form.gender,
-      bio: form.bio,
-    }
-
-    if (pendingAvatarFile.value) {
-      console.log('开始上传头像到阿里云...', pendingAvatarFile.value.name)
-      const result = await uploadAvatar(pendingAvatarFile.value)
-      console.log('上传结果:', result)
-      
-      if (result.code === 200) {
-        const oldAvatar = userStore.user?.avatar
-        const newAvatar = result.data
-        updateData.avatar = newAvatar
-
-        if (oldAvatar && oldAvatar !== newAvatar) {
-          try {
-            await cleanupFiles([oldAvatar])
-            console.log('已删除旧头像:', oldAvatar)
-          } catch (err) {
-            console.error('删除旧头像失败:', err)
-          }
-        }
-
-        URL.revokeObjectURL(pendingAvatarUrl.value)
-        pendingAvatarUrl.value = ''
-        pendingAvatarFile.value = null
-      } else {
-        errorMessage.value = result.message || '头像上传失败'
-        return
-      }
-    }
-
-    userStore.setUser(updateData)
-
-    successMessage.value = '保存成功'
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
-  } catch (err) {
-    errorMessage.value = '保存失败: ' + (err.message || '未知错误')
-  } finally {
-    saving.value = false
-  }
+const handleTabClick = (tab) => {
+  activeTab.value = tab
 }
 
-const handleLogout = () => {
-  userStore.logout()
-  router.push('/login')
-}
+onMounted(() => {
+  loadUserProfile()
+})
 </script>
 
 <style scoped>
-.profile-container {
-  min-height: 100vh;
-  background: #f5f5f5;
+.my-container {
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a1a;
 }
 
-.profile-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 32px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.header-left {
-  flex: 1;
-}
-
-.logo {
-  font-size: 24px;
-  font-weight: bold;
-  color: #667eea;
-  margin: 0;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.home-link {
-  padding: 8px 16px;
-  background: #f0f0f0;
-  color: #333;
-  text-decoration: none;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: all 0.3s;
-}
-
-.home-link:hover {
-  background: #e0e0e0;
-}
-
-.logout-btn {
-  padding: 8px 16px;
-  background: #ff4757;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
+.profile-header-section {
+  padding: 40px 60px;
+  position: relative;
   cursor: pointer;
-  transition: all 0.3s;
 }
 
-.logout-btn:hover {
-  background: #ff6b7a;
-}
-
-.login-btn {
-  padding: 8px 16px;
-  background: #f0f0f0;
-  color: #333;
-  text-decoration: none;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: all 0.3s;
-}
-
-.register-btn {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.background-hint {
+  position: absolute;
+  bottom: 20px;
+  right: 60px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
   color: white;
-  text-decoration: none;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: all 0.3s;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s;
 }
 
-.profile-main {
-  padding: 40px;
+.profile-header-section:hover .background-hint {
+  opacity: 1;
+}
+
+.profile-info {
   display: flex;
-  justify-content: center;
-}
-
-.profile-card {
-  background: white;
-  border-radius: 12px;
-  padding: 40px;
-  width: 100%;
-  max-width: 600px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.card-title {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 30px;
-  text-align: center;
-}
-
-.avatar-section {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 30px;
+  gap: 24px;
+  align-items: flex-start;
 }
 
 .avatar-wrapper {
-  position: relative;
   width: 120px;
   height: 120px;
   border-radius: 50%;
   overflow: hidden;
-  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
 }
 
 .avatar-img {
@@ -508,360 +409,338 @@ const handleLogout = () => {
   object-fit: cover;
 }
 
-.avatar-overlay {
+.user-details {
+  flex: 1;
+}
+
+.username-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.username {
+  font-size: 24px;
+  font-weight: bold;
+  color: #fff;
+  margin: 0;
+}
+
+.profile-follow-btn {
+  padding: 6px 20px;
+  background: #fe2c55;
+  border: none;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.profile-follow-btn:hover {
+  background: #e6204a;
+}
+
+.profile-follow-btn.followed {
+  background: #3a3a3a;
+}
+
+.profile-follow-btn.followed:hover {
+  background: #fe2c55;
+}
+
+.stats-row {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-num {
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #888;
+}
+
+.user-bio {
+  font-size: 14px;
+  color: #aaa;
+  margin: 0;
+}
+
+.tabs-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #2a2a2a;
+  padding: 0 60px;
+}
+
+.tab-item {
+  padding: 14px 24px;
+  font-size: 14px;
+  color: #888;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-item:hover {
+  color: #fff;
+}
+
+.tab-item.active {
+  color: #fff;
+  border-bottom-color: #fe2c55;
+}
+
+.tab-content {
+  padding: 20px 60px;
+}
+
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.work-card {
+  background: #2a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.work-card:hover {
+  transform: translateY(-4px);
+}
+
+.work-thumbnail {
+  position: relative;
+  width: 100%;
+  padding-top: 130%;
+  overflow: hidden;
+}
+
+.work-thumbnail img {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s;
+  object-fit: cover;
 }
 
-.avatar-wrapper:hover .avatar-overlay {
+.play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.work-card:hover .play-overlay {
   opacity: 1;
 }
 
-.upload-icon {
-  font-size: 24px;
+.work-info {
+  padding: 10px;
 }
 
-.upload-text {
-  font-size: 12px;
-  color: white;
-  margin-top: 5px;
-}
-
-.hidden-input {
-  display: none;
-}
-
-.avatar-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 12px;
-  gap: 12px;
-}
-
-.cancel-avatar-btn {
-  padding: 8px 16px;
-  background: #f0f0f0;
-  color: #666;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.cancel-avatar-btn:hover {
-  background: #e0e0e0;
-  color: #333;
-}
-
-.stats-section {
-  display: flex;
-  justify-content: center;
-  gap: 40px;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #eee;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.stat-item:hover {
-  transform: scale(1.05);
-}
-
-.stat-number {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #666;
-  margin-top: 4px;
-}
-
-.form-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
-
-.form-input {
-  padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: all 0.3s;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.form-input:disabled {
-  background: #f5f5f5;
-  color: #999;
-}
-
-.form-textarea {
-  padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  resize: vertical;
-  font-family: inherit;
-  transition: all 0.3s;
-}
-
-.form-textarea:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.gender-options {
-  display: flex;
-  gap: 20px;
-}
-
-.gender-option {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.gender-option input {
-  cursor: pointer;
-}
-
-.save-btn {
-  padding: 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s;
-  margin-top: 10px;
-}
-
-.save-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.save-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.success-message {
-  text-align: center;
-  color: #2ecc71;
-  font-size: 14px;
-  margin-top: 10px;
-}
-
-.error-message {
-  text-align: center;
-  color: #ff4757;
-  font-size: 14px;
-  margin-top: 10px;
-}
-
-.not-login {
-  text-align: center;
-  padding: 60px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.not-login h2 {
-  font-size: 24px;
-  color: #333;
-  margin-bottom: 20px;
-}
-
-.login-link {
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  text-decoration: none;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: all 0.3s;
-}
-
-.login-link:hover {
-  opacity: 0.9;
-}
-
-/* 关注/粉丝弹窗 */
-.follow-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.follow-modal-content {
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 80vh;
+.work-title {
+  font-size: 13px;
+  color: #fff;
+  display: block;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+.work-stats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #888;
+}
+
+.user-list {
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
-.follow-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px;
-  border-bottom: 1px solid #eee;
-}
-
-.follow-modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-  color: #333;
-}
-
-.close-btn {
-  width: 32px;
-  height: 32px;
-  background: #f0f0f0;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-}
-
-.close-btn:hover {
-  background: #e0e0e0;
-}
-
-.follow-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.follow-item {
+.user-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 12px;
+  background: #2a2a2a;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-.follow-item:last-child {
-  border-bottom: none;
+.user-item:hover {
+  background: #3a3a3a;
 }
 
-.follow-avatar {
+.user-avatar {
   width: 48px;
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
 }
 
-.follow-info {
+.user-info {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.follow-name {
+.user-name {
   font-size: 14px;
+  color: #fff;
   font-weight: 500;
-  color: #333;
 }
 
-.follow-bio {
+.user-bio {
   font-size: 12px;
-  color: #999;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #888;
 }
 
-.follow-action-btn {
-  padding: 6px 16px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.follow-action-btn:hover {
-  background: #5a67d8;
-}
-
-.follow-action-btn.following {
-  background: #f0f0f0;
-  color: #666;
-}
-
-.follow-action-btn.following:hover {
-  background: #ff4757;
-  color: white;
-}
-
-.empty-follow {
+.empty-state {
   text-align: center;
-  padding: 40px 0;
-  color: #999;
+  padding: 60px 0;
+  color: #888;
+}
+
+.video-modal {
+  position: fixed;
+  top: 0;
+  left: 200px;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  position: relative;
+  width: 80%;
+  max-width: 900px;
+}
+
+.close-btn {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.modal-video {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.video-info-overlay {
+  padding: 16px 0;
+}
+
+.video-info-overlay h3 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0 0 8px 0;
+}
+
+.video-info-overlay p {
+  color: #aaa;
+  font-size: 14px;
+  margin: 0;
+}
+
+.background-modal {
+  position: fixed;
+  top: 0;
+  left: 200px;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.background-modal-content {
+  background: #2a2a2a;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+
+.background-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.background-modal-header h3 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0;
+}
+
+.background-colors {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 20px;
+  gap: 16px;
+  justify-content: center;
+}
+
+.color-item {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 2px solid transparent;
+}
+
+.color-item:hover {
+  transform: scale(1.1);
+}
+
+.color-item.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
 }
 </style>

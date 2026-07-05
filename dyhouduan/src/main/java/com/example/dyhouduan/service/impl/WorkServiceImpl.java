@@ -49,6 +49,21 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     }
 
     @Override
+    public List<Work> getRecommendWorks(Long userId, int page, int size) {
+        int offset = (page - 1) * size;
+        // 未登录用户没有个性化数据，直接返回热门作品
+        if (userId == null) {
+            return baseMapper.selectHotWorks(offset, size);
+        }
+        List<Work> works = baseMapper.selectRecommendWorks(userId, offset, size);
+        // 个性化结果不足（例如新用户已看完可推荐内容）时，用热门作品兜底
+        if (works.isEmpty() && page == 1) {
+            return baseMapper.selectHotWorks(offset, size);
+        }
+        return works;
+    }
+
+    @Override
     public void incrementViews(Long workId) {
         Work work = getById(workId);
         if (work != null) {

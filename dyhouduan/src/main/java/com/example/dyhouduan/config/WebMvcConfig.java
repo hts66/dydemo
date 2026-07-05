@@ -45,6 +45,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/api/captcha",
                     "/api/works/**",
                     "/api/video/**",
+                    "/api/comments/**",
+                    "/api/users/**",
+                    "/api/follows/**",
                     "/error"
                 );
     }

@@ -1,20 +1,5 @@
 <template>
   <div class="featured-container">
-    <!-- 分类标签 -->
-    <div class="category-tabs">
-      <div class="tabs-scroll">
-        <div 
-          v-for="category in categories" 
-          :key="category"
-          class="tab-item"
-          :class="{ active: selectedCategory === category }"
-          @click="selectedCategory = category"
-        >
-          {{ category }}
-        </div>
-      </div>
-    </div>
-
     <!-- 视频网格 -->
     <div class="video-grid">
       <div 
@@ -34,14 +19,35 @@
         </div>
         <div class="video-info">
           <h3 class="video-title">{{ work.title || '无标题' }}</h3>
+          <p class="video-description" v-if="work.description">{{ work.description }}</p>
           <div class="video-meta">
-            <span class="video-author">{{ work.username || '匿名用户' }}</span>
-            <span class="video-stats">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-              </svg>
-              {{ formatCount(work.likesCount) }}
-            </span>
+            <div class="author-section">
+              <button 
+                class="author-follow-btn"
+                :class="{ followed: work.isFollowing }"
+                @click.stop="handleFollow(work)"
+              >
+                <img :src="work.avatar || defaultAvatar" @click.stop="goToProfile(work.userId)" />
+                <svg v-if="!work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+              </button>
+              <span class="video-author">{{ work.username || '匿名用户' }}</span>
+            </div>
+            <div class="stats-section">
+              <span class="video-stat">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                {{ formatCount(work.likesCount) }}
+              </span>
+              <span class="video-stat">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/>
+                </svg>
+                {{ formatCount(work.commentsCount) }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -66,7 +72,16 @@
           </div>
           <div class="interaction-section">
             <div class="author-bar">
-              <img :src="currentVideo.avatar || defaultAvatar" class="author-avatar" />
+              <button 
+                class="follow-btn" 
+                :class="{ followed: currentVideo.isFollowing }"
+                @click.stop="handleFollow"
+              >
+                <img :src="currentVideo.avatar || defaultAvatar" @click.stop="goToProfile" />
+                <svg v-if="!currentVideo.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+              </button>
               <span class="author-name">{{ currentVideo.username || '匿名用户' }}</span>
             </div>
             <div class="action-bar">
@@ -133,6 +148,7 @@ import { useUserStore } from '../stores/user'
 import { getWorks } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
+import { toggleFollow, checkIsFollowing } from '../api/follow'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -146,8 +162,7 @@ const getProxyUrl = (url) => {
   return url
 }
 
-const categories = ['全部', '公开课', '游戏', '二次元', '音乐', '影视', '美食', '知识', '小剧场', '生活vlog', '体育', '旅行', '亲子', '动物', '三农', '汽车', '美妆穿搭']
-const selectedCategory = ref('全部')
+
 const works = ref([])
 const currentVideo = ref(null)
 const comments = ref([])
@@ -155,15 +170,7 @@ const commentInput = ref('')
 const videoPlayer = ref(null)
 const commentsSection = ref(null)
 
-const filteredWorks = computed(() => {
-  if (selectedCategory.value === '全部') return works.value
-  return works.value.filter(w => {
-    const desc = (w.description || '').toLowerCase()
-    const title = (w.title || '').toLowerCase()
-    const category = selectedCategory.value.toLowerCase()
-    return desc.includes(category) || title.includes(category)
-  })
-})
+const filteredWorks = computed(() => works.value)
 
 const loadWorks = async () => {
   try {
@@ -171,10 +178,17 @@ const loadWorks = async () => {
     if (result.code === 200) {
       for (const work of result.data) {
         work.isLiked = false
+        work.isFollowing = false
         try {
           const likeResult = await checkIsLiked(work.id)
           if (likeResult.code === 200) work.isLiked = likeResult.data
         } catch (e) {}
+        if (userStore.isLoggedIn && work.userId) {
+          try {
+            const followResult = await checkIsFollowing(work.userId)
+            if (followResult.code === 200) work.isFollowing = followResult.data
+          } catch (e) {}
+        }
       }
       works.value = result.data
     }
@@ -193,15 +207,19 @@ const openVideo = async (work) => {
   comments.value = []
   
   try {
-    const [likeResult, commentResult] = await Promise.all([
+    const [likeResult, commentResult, followResult] = await Promise.all([
       checkIsLiked(work.id),
-      getComments(work.id)
+      getComments(work.id),
+      userStore.isLoggedIn ? checkIsFollowing(work.userId) : Promise.resolve({ code: 200, data: false })
     ])
     if (likeResult.code === 200) {
       currentVideo.value.isLiked = likeResult.data
     }
     if (commentResult.code === 200) {
       comments.value = commentResult.data
+    }
+    if (followResult.code === 200) {
+      currentVideo.value.isFollowing = followResult.data
     }
   } catch (err) {
     console.error('加载视频信息失败', err)
@@ -240,6 +258,38 @@ const handleLike = async () => {
     }
   } catch (err) {
     console.error('点赞失败', err)
+  }
+}
+
+const handleFollow = async (work) => {
+  if (!userStore.isLoggedIn) {
+    router.push('/login')
+    return
+  }
+  
+  const targetWork = work || currentVideo.value
+  if (!targetWork) return
+  
+  try {
+    const result = await toggleFollow(targetWork.userId)
+    if (result.code === 200) {
+      targetWork.isFollowing = result.data
+      if (work) {
+        const idx = filteredWorks.value.findIndex(w => w.id === work.id)
+        if (idx !== -1) {
+          filteredWorks.value[idx].isFollowing = result.data
+        }
+      }
+    }
+  } catch (err) {
+    console.error('关注失败', err)
+  }
+}
+
+const goToProfile = (userId) => {
+  const targetUserId = userId || (currentVideo.value && currentVideo.value.userId)
+  if (targetUserId) {
+    router.push(`/profile/${targetUserId}`)
   }
 }
 
@@ -311,48 +361,6 @@ const formatTime = (dateStr) => {
   background: #1a1a1a;
 }
 
-/* 分类标签 */
-.category-tabs {
-  position: sticky;
-  top: 0;
-  background: #1a1a1a;
-  border-bottom: 1px solid #2a2a2a;
-  z-index: 10;
-}
-
-.tabs-scroll {
-  display: flex;
-  gap: 8px;
-  padding: 12px 20px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tabs-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.tab-item {
-  padding: 6px 16px;
-  background: #2a2a2a;
-  border-radius: 16px;
-  font-size: 13px;
-  color: #ccc;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-
-.tab-item:hover {
-  background: #3a3a3a;
-  color: #fff;
-}
-
-.tab-item.active {
-  background: #fe2c55;
-  color: #fff;
-}
-
 /* 视频网格 */
 .video-grid {
   display: grid;
@@ -421,6 +429,18 @@ const formatTime = (dateStr) => {
   font-size: 14px;
   font-weight: 500;
   color: #fff;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
+}
+
+.video-description {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
   margin-bottom: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -438,13 +458,65 @@ const formatTime = (dateStr) => {
   color: #888;
 }
 
+.author-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.author-follow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.author-follow-btn img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.author-follow-btn.followed img {
+  border-color: #fe2c55;
+}
+
+.author-follow-btn svg {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  background: #fe2c55;
+  border-radius: 50%;
+  padding: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
 .video-author {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.video-stats {
+.stats-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.video-stat {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -526,14 +598,52 @@ const formatTime = (dateStr) => {
   border-bottom: 1px solid #333;
 }
 
-.author-avatar {
-  width: 48px;
-  height: 48px;
+.follow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+}
+
+.follow-btn img {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.follow-btn.followed img {
+  border-color: #fe2c55;
+}
+
+.follow-btn svg {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  background: #fe2c55;
+  border-radius: 50%;
+  padding: 3px;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+}
+
+.follow-btn:hover {
+  transform: scale(1.1);
 }
 
 .author-name {
+  flex: 1;
   color: #fff;
   font-size: 16px;
   font-weight: 500;

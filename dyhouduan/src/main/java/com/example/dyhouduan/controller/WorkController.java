@@ -204,6 +204,25 @@ public class WorkController {
     }
 
     /**
+     * 获取个性化推荐视频列表
+     * 未登录用户返回热门视频
+     */
+    @GetMapping("/recommend")
+    public Response<List<Work>> getRecommendWorks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
+        try {
+            Long userId = getUserIdFromToken(request);
+            List<Work> works = workService.getRecommendWorks(userId, page, size);
+            return Response.success(works);
+        } catch (Exception e) {
+            log.error("获取推荐视频失败", e);
+            return Response.error("获取推荐视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 记录观看历史
      */
     @PostMapping("/watch")

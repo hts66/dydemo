@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN background VARCHAR(255) DEFAULT '#000000' COMMENT '用户主页背景颜色';

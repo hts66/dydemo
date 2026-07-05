@@ -1,9 +1,19 @@
 <template>
   <div class="my-container">
-    <div class="profile-header-section">
-      <button class="logout-btn" v-if="userStore.isLoggedIn" @click="handleLogout">退出登录</button>
-      <div class="profile-info">
-        <div class="avatar-wrapper" @click="openEditModal" v-if="userStore.isLoggedIn">
+    <div 
+      class="profile-header-section"
+      :style="{ background: currentBackground }"
+      @click="toggleBackgroundPicker"
+    >
+      <button class="logout-btn" v-if="userStore.isLoggedIn" @click.stop="handleLogout">退出登录</button>
+      <div class="background-hint">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+          <path d="M20.71 4.04a1 1 0 0 0-1.42 0l-3.02 3.02-7.19-7.19a1 1 0 0 0-1.42 0L3.29 5.36a1 1 0 0 0 0 1.42l7.19 7.19-3.02 3.02a1 1 0 0 0 0 1.42l2.12 2.12a1 1 0 0 0 1.42 0l3.02-3.02 7.19 7.19a1 1 0 0 0 1.42 0l2.12-2.12a1 1 0 0 0 0-1.42l-7.19-7.19 3.02-3.02a1 1 0 0 0 0-1.42z"/>
+        </svg>
+        <span>点击更换背景</span>
+      </div>
+      <div class="profile-info" @click.stop>
+        <div class="avatar-wrapper" @click.stop="openEditModal" v-if="userStore.isLoggedIn">
           <img :src="userStore.user?.avatar || defaultAvatar" class="avatar-img" />
           <div class="avatar-edit-hint">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">
@@ -17,7 +27,7 @@
         <div class="user-details">
           <div class="username-row">
             <h2 class="username">{{ userStore.user?.username || '未登录' }}</h2>
-            <button class="edit-btn" v-if="userStore.isLoggedIn" @click="openEditModal">编辑资料</button>
+            <button class="edit-btn" v-if="userStore.isLoggedIn" @click.stop="openEditModal">编辑资料</button>
           </div>
           <div class="stats-row">
             <div class="stat-item">
@@ -38,7 +48,6 @@
       </div>
     </div>
 
-    <!-- Tab 切换 -->
     <div class="tabs-bar">
       <div 
         class="tab-item" 
@@ -69,7 +78,6 @@
         粉丝
       </div>
       
-      <!-- 批量管理按钮 -->
       <div class="tabs-right">
         <template v-if="!isBatchMode">
           <button 
@@ -93,9 +101,7 @@
       </div>
     </div>
 
-    <!-- 内容区 -->
     <div class="tab-content">
-      <!-- 作品 -->
       <div v-if="activeTab === 'works'" class="works-grid">
         <div 
           v-for="work in myWorks" 
@@ -142,7 +148,6 @@
         </div>
       </div>
 
-      <!-- 喜欢 -->
       <div v-if="activeTab === 'liked'" class="works-grid">
         <div 
           v-for="work in likedWorks" 
@@ -181,7 +186,6 @@
         </div>
       </div>
 
-      <!-- 关注 -->
       <div v-if="activeTab === 'following'" class="user-list">
         <div 
           v-for="user in followingList" 
@@ -214,7 +218,6 @@
         </div>
       </div>
 
-      <!-- 粉丝 -->
       <div v-if="activeTab === 'followers'" class="user-list">
         <div v-for="user in followerList" :key="user.id" class="user-item">
           <img :src="user.avatar || defaultAvatar" class="user-avatar" />
@@ -229,7 +232,6 @@
       </div>
     </div>
 
-    <!-- 视频播放弹窗 -->
     <div v-if="currentVideo" class="video-modal" @click.self="closeVideo">
       <div class="modal-content">
         <button class="close-btn" @click="closeVideo">✕</button>
@@ -248,7 +250,6 @@
       </div>
     </div>
 
-    <!-- 编辑资料弹窗 -->
     <div v-if="showEditModal" class="edit-modal" @click.self="closeEditModal">
       <div class="edit-modal-content">
         <div class="edit-modal-header">
@@ -256,7 +257,6 @@
           <button class="close-btn" @click="closeEditModal">✕</button>
         </div>
         <div class="edit-modal-body">
-          <!-- 头像上传 -->
           <div class="avatar-edit-section">
             <label class="avatar-edit-label">头像</label>
             <div class="avatar-edit-wrapper" @click="triggerAvatarUpload">
@@ -277,7 +277,6 @@
             />
           </div>
 
-          <!-- 用户名 -->
           <div class="edit-field">
             <label class="edit-field-label">用户名</label>
             <input 
@@ -288,7 +287,6 @@
             />
           </div>
 
-          <!-- 性别 -->
           <div class="edit-field">
             <label class="edit-field-label">性别</label>
             <div class="gender-options">
@@ -307,7 +305,6 @@
             </div>
           </div>
 
-          <!-- 简介 -->
           <div class="edit-field">
             <label class="edit-field-label">简介</label>
             <textarea 
@@ -330,6 +327,25 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showBackgroundPicker" class="background-modal" @click.self="toggleBackgroundPicker">
+      <div class="background-modal-content">
+        <div class="background-modal-header">
+          <h3>选择背景颜色</h3>
+          <button class="close-btn" @click="toggleBackgroundPicker">✕</button>
+        </div>
+        <div class="background-colors">
+          <div 
+            v-for="color in backgroundColors" 
+            :key="color"
+            class="color-item"
+            :class="{ active: currentBackground === color }"
+            :style="{ background: color }"
+            @click="selectBackground(color)"
+          ></div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -341,6 +357,7 @@ import { getWorks, deleteWork } from '../api/work'
 import { getFollowList, toggleFollow } from '../api/follow'
 import { uploadAvatar } from '../api/upload'
 import { getLikedWorks } from '../api/like'
+import { updateBackground } from '../api/user'
 import request from '../utils/request'
 
 const router = useRouter()
@@ -361,7 +378,6 @@ const videoPlayer = ref(null)
 const isBatchMode = ref(false)
 const selectedItems = ref([])
 
-// 编辑资料弹窗
 const showEditModal = ref(false)
 const saving = ref(false)
 const editSuccess = ref(false)
@@ -373,6 +389,36 @@ const editForm = ref({
   bio: '',
   avatar: '',
 })
+
+const currentBackground = ref('linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)')
+const showBackgroundPicker = ref(false)
+const backgroundColors = [
+  'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)',
+  'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+  'linear-gradient(135deg, #0f3460 0%, #533483 100%)',
+  'linear-gradient(135deg, #e94560 0%, #ff6b6b 100%)',
+  'linear-gradient(135deg, #ff8e53 0%, #feca57 100%)',
+  'linear-gradient(135deg, #48dbfb 0%, #1dd1a1 100%)',
+  'linear-gradient(135deg, #5f27cd 0%, #a855f7 100%)',
+  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+]
+
+const toggleBackgroundPicker = () => {
+  showBackgroundPicker.value = !showBackgroundPicker.value
+}
+
+const selectBackground = async (color) => {
+  currentBackground.value = color
+  showBackgroundPicker.value = false
+  try {
+    const result = await updateBackground(color)
+    if (result.code === 200) {
+      userStore.user.background = color
+    }
+  } catch (err) {
+    console.error('更新背景失败', err)
+  }
+}
 
 const openEditModal = () => {
   const user = userStore.user
@@ -417,7 +463,6 @@ const handleAvatarChange = async (e) => {
   } catch (err) {
     editError.value = '上传失败，请重试'
   }
-  // 重置input，允许重复选择同一文件
   e.target.value = ''
 }
 
@@ -437,7 +482,6 @@ const saveProfile = async () => {
       avatar: editForm.value.avatar,
     })
     if (result.code === 200) {
-      // 更新store中的用户信息
       userStore.setUser({
         ...userStore.user,
         username: editForm.value.username.trim(),
@@ -632,6 +676,9 @@ onMounted(() => {
     loadMyWorks()
     loadFollowData()
     loadLikedWorks()
+    if (userStore.user?.background) {
+      currentBackground.value = userStore.user.background
+    }
   }
 })
 </script>
@@ -645,8 +692,8 @@ onMounted(() => {
 
 .profile-header-section {
   padding: 40px 60px;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
   position: relative;
+  cursor: pointer;
 }
 
 .logout-btn {
@@ -665,6 +712,26 @@ onMounted(() => {
 
 .logout-btn:hover {
   background: #e6204a;
+}
+
+.background-hint {
+  position: absolute;
+  bottom: 20px;
+  right: 60px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
+  color: white;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.profile-header-section:hover .background-hint {
+  opacity: 1;
 }
 
 .profile-info {
@@ -764,7 +831,6 @@ onMounted(() => {
   margin: 0;
 }
 
-/* Tabs */
 .tabs-bar {
   display: flex;
   gap: 0;
@@ -832,7 +898,6 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-/* Content */
 .tab-content {
   padding: 20px 60px;
 }
@@ -949,7 +1014,6 @@ onMounted(() => {
   color: #888;
 }
 
-/* User List */
 .user-list {
   display: flex;
   flex-direction: column;
@@ -1018,18 +1082,6 @@ onMounted(() => {
   color: #888;
 }
 
-.upload-link {
-  display: inline-block;
-  margin-top: 12px;
-  padding: 8px 20px;
-  background: #fe2c55;
-  color: #fff;
-  text-decoration: none;
-  border-radius: 16px;
-  font-size: 13px;
-}
-
-/* Video Modal */
 .video-modal {
   position: fixed;
   top: 0;
@@ -1084,7 +1136,6 @@ onMounted(() => {
   margin: 0;
 }
 
-/* Edit Modal */
 .edit-modal {
   position: fixed;
   top: 0;
@@ -1313,5 +1364,66 @@ onMounted(() => {
 
 .hidden-input {
   display: none;
+}
+
+.background-modal {
+  position: fixed;
+  top: 0;
+  left: 200px;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.background-modal-content {
+  background: #2a2a2a;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+
+.background-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.background-modal-header h3 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0;
+}
+
+.background-colors {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 20px;
+  gap: 16px;
+  justify-content: center;
+}
+
+.color-item {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 2px solid transparent;
+}
+
+.color-item:hover {
+  transform: scale(1.1);
+}
+
+.color-item.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
 }
 </style>
