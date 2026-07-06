@@ -74,7 +74,8 @@ public class AuthController {
                     user.getUsername(),
                     user.getGender(),
                     user.getBio(),
-                    user.getAvatar()
+                    user.getAvatar(),
+                    user.getBackground()
             );
 
             return Response.success(new LoginResponse(token, refreshToken, userVO));
@@ -222,7 +223,8 @@ public class AuthController {
                     user.getUsername(),
                     user.getGender(),
                     user.getBio(),
-                    user.getAvatar()
+                    user.getAvatar(),
+                    user.getBackground()
             );
 
             return Response.success(new LoginResponse(newAccessToken, newRefreshToken, userVO));

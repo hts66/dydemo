@@ -318,6 +318,7 @@ const handleLogout = () => {
 .upload-container {
   min-height: 100vh;
   background: #f5f5f5;
+  overflow-y: auto;
 }
 
 .upload-header {

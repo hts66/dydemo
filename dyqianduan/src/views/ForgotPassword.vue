@@ -203,16 +203,10 @@ const sendCode = async () => {
     errors.email = '邮箱格式不正确'
     return
   }
-  if (!form.captcha) {
-    errors.captcha = '请输入图形验证码'
-    return
-  }
 
   try {
     await request.post('/auth/forgot-password', {
       email: form.email,
-      captcha: form.captcha,
-      captchaKey: form.captchaKey,
     })
 
     codeBtnDisabled.value = true
