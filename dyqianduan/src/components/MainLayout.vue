@@ -184,6 +184,7 @@ import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
 import { getFriends } from '../api/follow'
 import { getChatMessages, sendMessage } from '../api/message'
+import request from '../utils/request'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -266,18 +267,49 @@ const closeChat = () => {
 const sendChatMessage = async () => {
   if (!chatInput.value.trim() || !currentChatFriend.value || !userStore.user?.id) return
   
+  const message = chatInput.value.trim()
+  
   try {
-    const result = await sendMessage(currentChatFriend.value.id, chatInput.value.trim())
-    if (result.code === 200) {
+    if (message.includes('@机器人')) {
       chatMessages.value.push({
-        ...result.data,
+        id: Date.now(),
+        content: message,
         senderId: userStore.user.id,
         senderUsername: userStore.user.username,
-        senderAvatar: userStore.user.avatar
+        senderAvatar: userStore.user.avatar,
+        createdAt: new Date().toISOString()
       })
       chatInput.value = ''
       await nextTick()
       scrollToBottom()
+      
+      const botMessage = message.replace('@机器人', '').trim() || '你好'
+      const botResult = await request.post('/chat/bot', { message: botMessage })
+      if (botResult.code === 200) {
+        chatMessages.value.push({
+          id: Date.now() + 1,
+          content: botResult.data,
+          senderId: 0,
+          senderUsername: '机器人',
+          senderAvatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+          createdAt: new Date().toISOString()
+        })
+        await nextTick()
+        scrollToBottom()
+      }
+    } else {
+      const result = await sendMessage(currentChatFriend.value.id, message)
+      if (result.code === 200) {
+        chatMessages.value.push({
+          ...result.data,
+          senderId: userStore.user.id,
+          senderUsername: userStore.user.username,
+          senderAvatar: userStore.user.avatar
+        })
+        chatInput.value = ''
+        await nextTick()
+        scrollToBottom()
+      }
     }
   } catch (err) {
     console.error('发送消息失败', err)
