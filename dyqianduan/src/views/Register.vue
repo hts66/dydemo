@@ -148,7 +148,7 @@ const captchaImage = ref('')
 const refreshCaptcha = async () => {
   try {
     const response = await request.get('/captcha')
-    if (response.data) {
+    if (response && response.data) {
       form.captchaKey = response.data.key
       captchaImage.value = response.data.image
     }
@@ -241,9 +241,6 @@ const sendCode = async () => {
         codeCountdown.value = 60
       }
     }, 1000)
-
-    await refreshCaptcha()
-    form.captcha = ''
   } catch (err: any) {
     errorMessage.value = err?.message || '发送验证码失败'
     await refreshCaptcha()
@@ -257,7 +254,7 @@ const handleSubmit = async () => {
   loading.value = true
 
   try {
-    await request.post('/auth/register/code', {
+    const response = await request.post('/auth/register/code', {
       email: form.email,
       username: form.username,
       password: form.password,
@@ -266,7 +263,11 @@ const handleSubmit = async () => {
       captchaKey: form.captchaKey,
     })
 
-    await userStore.handleLogin(form.email, form.password)
+    if (response.data) {
+      userStore.setToken(response.data.token)
+      userStore.setRefreshToken(response.data.refreshToken || '')
+      userStore.setUser(response.data.user || {})
+    }
     router.push('/')
   } catch (err: any) {
     errorMessage.value = err?.message || '注册失败'

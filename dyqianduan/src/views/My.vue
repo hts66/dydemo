@@ -342,7 +342,7 @@
             class="background-file-input"
             @change="handleBackgroundUpload"
           />
-          <div class="upload-placeholder" @click="triggerBackgroundUpload">
+          <div class="upload-placeholder" v-if="!previewBackground" @click="triggerBackgroundUpload">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="#888">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
             </svg>
@@ -351,6 +351,10 @@
           </div>
           <div v-if="previewBackground" class="background-preview">
             <img :src="previewBackground" />
+            <div class="bg-actions">
+              <button class="bg-confirm-btn" @click.stop="confirmBackground">确认更换</button>
+              <button class="bg-cancel-btn" @click.stop="cancelBackground">取消</button>
+            </div>
             <button class="remove-bg-btn" @click="removeBackground">移除背景</button>
           </div>
         </div>
@@ -365,9 +369,8 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getWorks, deleteWork } from '../api/work'
 import { getFollowList, toggleFollow } from '../api/follow'
-import { uploadAvatar } from '../api/upload'
 import { getLikedWorks } from '../api/like'
-import { updateBackground } from '../api/user'
+import { updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
 import request from '../utils/request'
 
 const router = useRouter()
@@ -394,6 +397,8 @@ const saving = ref(false)
 const editSuccess = ref(false)
 const editError = ref('')
 const avatarFileInput = ref(null)
+const pendingAvatarFile = ref(null)      // 待上传的头像文件（选择后暂存，保存时才上传）
+const originalAvatar = ref('')           // 打开弹窗时的原始头像URL
 const editForm = ref({
   username: '',
   gender: 0,
@@ -405,6 +410,7 @@ const currentBackground = ref('')
 const showBackgroundPicker = ref(false)
 const backgroundFileInput = ref(null)
 const previewBackground = ref('')
+const pendingBackgroundFile = ref(null)   // 待上传的背景图文件
 const headerHeight = ref(300)
 
 const toggleBackgroundPicker = () => {
@@ -412,7 +418,9 @@ const toggleBackgroundPicker = () => {
   if (showBackgroundPicker.value && currentBackground.value) {
     previewBackground.value = currentBackground.value
   } else {
+    // 关闭弹窗 → 丢弃所有本地预览
     previewBackground.value = ''
+    pendingBackgroundFile.value = null
   }
 }
 
@@ -420,26 +428,39 @@ const triggerBackgroundUpload = () => {
   backgroundFileInput.value?.click()
 }
 
-const handleBackgroundUpload = async (event) => {
+const handleBackgroundUpload = (event) => {
   const file = event.target.files?.[0]
   if (!file) return
 
+  // 仅本地预览，不上传到 OSS！上传在 confirmBackground 点"确认更换"时才执行
+  pendingBackgroundFile.value = file
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    previewBackground.value = ev.target.result
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+const confirmBackground = async () => {
+  if (!pendingBackgroundFile.value) return
+
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    const result = await request.post('/upload/background', formData)
+    const result = await updateBackgroundFile(pendingBackgroundFile.value)
     if (result.code === 200) {
-      currentBackground.value = result.data
-      previewBackground.value = result.data
-      const updateResult = await updateBackground(result.data)
-      if (updateResult.code === 200) {
-        userStore.setUser(updateResult.data)
-      }
+      currentBackground.value = result.data.background
+      previewBackground.value = result.data.background
+      userStore.setUser(result.data)
+      pendingBackgroundFile.value = null
     }
   } catch (err) {
-    console.error('上传背景图片失败', err)
+    console.error('更换背景图失败', err)
   }
+}
+
+const cancelBackground = () => {
+  previewBackground.value = currentBackground.value || ''
+  pendingBackgroundFile.value = null
 }
 
 const removeBackground = async () => {
@@ -484,6 +505,9 @@ const openEditModal = () => {
     bio: user?.bio || '',
     avatar: user?.avatar || '',
   }
+  // 保存原始头像URL，用于取消时恢复
+  originalAvatar.value = user?.avatar || ''
+  pendingAvatarFile.value = null
   editSuccess.value = false
   editError.value = ''
   showEditModal.value = true
@@ -491,13 +515,16 @@ const openEditModal = () => {
 
 const closeEditModal = () => {
   showEditModal.value = false
+  // 取消编辑 → 丢弃本地预览，什么都不上传到 OSS
+  pendingAvatarFile.value = null
+  editForm.value.avatar = originalAvatar.value
 }
 
 const triggerAvatarUpload = () => {
   avatarFileInput.value?.click()
 }
 
-const handleAvatarChange = async (e) => {
+const handleAvatarChange = (e) => {
   const file = e.target.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
@@ -508,17 +535,15 @@ const handleAvatarChange = async (e) => {
     editError.value = '图片大小不能超过5MB'
     return
   }
-  try {
-    const result = await uploadAvatar(file)
-    if (result.code === 200) {
-      editForm.value.avatar = result.data
-      editError.value = ''
-    } else {
-      editError.value = result.message || '上传失败'
-    }
-  } catch (err) {
-    editError.value = '上传失败，请重试'
+
+  // 仅本地预览，不上传到 OSS！上传在 saveProfile 点"保存"时才执行
+  pendingAvatarFile.value = file
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    editForm.value.avatar = ev.target.result
   }
+  reader.readAsDataURL(file)
+  editError.value = ''
   e.target.value = ''
 }
 
@@ -530,21 +555,32 @@ const saveProfile = async () => {
   saving.value = true
   editError.value = ''
   editSuccess.value = false
+
   try {
+    // 只有点"保存"时才真正上传头像到 OSS
+    if (pendingAvatarFile.value) {
+      const avatarResult = await updateAvatar(pendingAvatarFile.value)
+      if (avatarResult.code !== 200) {
+        editError.value = avatarResult.message || '头像上传失败'
+        saving.value = false
+        return
+      }
+      // updateAvatar 已原子完成：上传OSS + 删旧头像 + 更新DB
+      userStore.setUser(avatarResult.data)
+      pendingAvatarFile.value = null
+    }
+
+    // 更新其他资料字段（用户名、性别、简介）
+    // 注意：如果头像已通过 updateAvatar 更新，不要再传 avatar，
+    // 否则后端 updateProfile 会误删刚上传的头像
     const result = await request.put('/auth/user/profile', {
       username: editForm.value.username.trim(),
       gender: editForm.value.gender,
       bio: editForm.value.bio.trim(),
-      avatar: editForm.value.avatar,
     })
     if (result.code === 200) {
-      userStore.setUser({
-        ...userStore.user,
-        username: editForm.value.username.trim(),
-        gender: editForm.value.gender,
-        bio: editForm.value.bio.trim(),
-        avatar: editForm.value.avatar,
-      })
+      // 头像已在上面更新了 store，这里再同步一次确保一致
+      userStore.setUser(result.data)
       editSuccess.value = true
       setTimeout(() => {
         closeEditModal()
@@ -1526,8 +1562,43 @@ onMounted(() => {
   object-fit: contain;
 }
 
-.remove-bg-btn {
+.bg-actions {
+  display: flex;
+  gap: 12px;
   margin-top: 12px;
+  justify-content: center;
+}
+
+.bg-confirm-btn,
+.bg-cancel-btn {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bg-confirm-btn {
+  background: #fe2c55;
+  color: #fff;
+}
+
+.bg-confirm-btn:hover {
+  background: #e6204a;
+}
+
+.bg-cancel-btn {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.bg-cancel-btn:hover {
+  background: #4a4a4a;
+}
+
+.remove-bg-btn {
+  margin-top: 8px;
   padding: 8px 24px;
   background: #444;
   border: none;

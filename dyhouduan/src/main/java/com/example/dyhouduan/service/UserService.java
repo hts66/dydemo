@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.example.dyhouduan.dto.LoginResponse;
 import com.example.dyhouduan.dto.RegisterRequest;
 import com.example.dyhouduan.entity.User;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface UserService extends IService<User> {
     LoginResponse login(String email, String password);
@@ -17,4 +18,8 @@ public interface UserService extends IService<User> {
     User resetPassword(String email, String newPassword);
 
     User updateBackground(Long userId, String background);
+
+    User updateAvatar(Long userId, MultipartFile file);
+
+    User updateBackgroundFile(Long userId, MultipartFile file);
 }

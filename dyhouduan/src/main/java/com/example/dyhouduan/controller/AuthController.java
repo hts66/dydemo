@@ -13,7 +13,9 @@ import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -30,6 +32,9 @@ public class AuthController {
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @PostMapping("/login")
     public Response<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -65,6 +70,12 @@ public class AuthController {
                 return Response.error(401, "用户不存在");
             }
 
+            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                return Response.error(401, "密码错误");
+            }
+
+            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
+
             String token = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
             String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
 
@@ -96,6 +107,7 @@ public class AuthController {
             }
 
             User user = userService.register(request);
+            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
             return Response.success("注册成功", user);
         } catch (Exception e) {
             return Response.error(400, e.getMessage());
@@ -103,7 +115,7 @@ public class AuthController {
     }
 
     @PostMapping("/register/code")
-    public Response<User> registerWithCode(@RequestBody RegisterRequest request) {
+    public Response<LoginResponse> registerWithCode(@RequestBody RegisterRequest request) {
         try {
             if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
                 return Response.error(400, "图形验证码错误");
@@ -114,7 +126,22 @@ public class AuthController {
             }
 
             User user = userService.register(request);
-            return Response.success("注册成功", user);
+            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
+
+            String token = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
+            String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
+
+            LoginResponse.UserVO userVO = new LoginResponse.UserVO(
+                    user.getId(),
+                    user.getEmail(),
+                    user.getUsername(),
+                    user.getGender(),
+                    user.getBio(),
+                    user.getAvatar(),
+                    user.getBackground()
+            );
+
+            return Response.success("注册成功", new LoginResponse(token, refreshToken, userVO));
         } catch (Exception e) {
             return Response.error(400, e.getMessage());
         }
@@ -171,6 +198,7 @@ public class AuthController {
             }
 
             userService.resetPassword(request.getEmail(), request.getNewPassword());
+            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
             return Response.success("密码重置成功");
         } catch (Exception e) {
             return Response.error(400, e.getMessage());
@@ -187,6 +215,36 @@ public class AuthController {
             Long userId = jwtUtil.getUserId(token);
             User updated = userService.updateProfile(userId, profile);
             return Response.success("更新成功", updated);
+        } catch (Exception e) {
+            return Response.error(400, e.getMessage());
+        }
+    }
+
+    @PutMapping("/user/avatar")
+    public Response<User> updateAvatar(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            String token = authorization != null && authorization.startsWith("Bearer ")
+                    ? authorization.substring(7) : authorization;
+            Long userId = jwtUtil.getUserId(token);
+            User updated = userService.updateAvatar(userId, file);
+            return Response.success("头像更新成功", updated);
+        } catch (Exception e) {
+            return Response.error(400, e.getMessage());
+        }
+    }
+
+    @PutMapping("/user/background")
+    public Response<User> updateBackgroundFile(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            String token = authorization != null && authorization.startsWith("Bearer ")
+                    ? authorization.substring(7) : authorization;
+            Long userId = jwtUtil.getUserId(token);
+            User updated = userService.updateBackgroundFile(userId, file);
+            return Response.success("背景图更新成功", updated);
         } catch (Exception e) {
             return Response.error(400, e.getMessage());
         }
@@ -241,9 +299,29 @@ public class AuthController {
         if (storedCaptcha == null) {
             return false;
         }
-        boolean valid = storedCaptcha.toString().equalsIgnoreCase(captcha.trim());
+        
+        String storedValue = storedCaptcha.toString();
+        if (storedValue.isEmpty()) {
+            return false;
+        }
+        
+        String[] parts = storedValue.split(":");
+        if (parts.length < 2) {
+            return false;
+        }
+        
+        String code = parts[0];
+        long timestamp = Long.parseLong(parts[1]);
+        long now = System.currentTimeMillis();
+        
+        if (now - timestamp > 5 * 60 * 1000) {
+            redisTemplate.opsForValue().set("captcha:" + captchaKey, "");
+            return false;
+        }
+        
+        boolean valid = code.equalsIgnoreCase(captcha.trim());
         if (valid) {
-            redisTemplate.delete("captcha:" + captchaKey);
+            redisTemplate.opsForValue().set("captcha:" + captchaKey, "");
         }
         return valid;
     }

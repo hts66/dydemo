@@ -1,4 +1,4 @@
-﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="my-container" ref="containerRef" @scroll="handleScroll">
     <div 
       class="profile-header-section"
@@ -12,9 +12,25 @@
         <span>点击更换背景</span>
       </div>
       <div class="profile-info" @click.stop>
-        <div class="avatar-wrapper">
-          <img :src="targetUser?.avatar || defaultAvatar" class="avatar-img" />
+        <div
+          class="avatar-wrapper"
+          :class="{ 'avatar-editable': isOwnProfile }"
+          @click.stop="isOwnProfile && triggerAvatarUpload()"
+        >
+          <img :src="previewAvatar || targetUser?.avatar || defaultAvatar" class="avatar-img" />
+          <div v-if="isOwnProfile" class="avatar-edit-overlay">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+          </div>
         </div>
+        <input
+          type="file"
+          ref="avatarFileInput"
+          accept="image/*"
+          style="display: none"
+          @change="handleAvatarSelect"
+        />
         <div class="user-details">
           <div class="username-row">
             <h2 class="username">{{ targetUser?.username || '用户' }}</h2>
@@ -42,6 +58,10 @@
             </div>
           </div>
           <p class="user-bio">{{ targetUser?.bio || '这个人很懒，什么都没写~' }}</p>
+          <div v-if="showAvatarActions" class="avatar-actions">
+            <button class="avatar-confirm-btn" @click.stop="confirmAvatar">确认更换</button>
+            <button class="avatar-cancel-btn" @click.stop="cancelAvatar">取消</button>
+          </div>
         </div>
       </div>
     </div>
@@ -170,7 +190,7 @@
             class="background-file-input"
             @change="handleBackgroundUpload"
           />
-          <div class="upload-placeholder" @click="triggerBackgroundUpload">
+          <div class="upload-placeholder" v-if="!previewBackground" @click="triggerBackgroundUpload">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="#888">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
             </svg>
@@ -179,6 +199,10 @@
           </div>
           <div v-if="previewBackground" class="background-preview">
             <img :src="previewBackground" />
+            <div class="bg-actions">
+              <button class="bg-confirm-btn" @click.stop="confirmBackground">确认更换</button>
+              <button class="bg-cancel-btn" @click.stop="cancelBackground">取消</button>
+            </div>
             <button class="remove-bg-btn" @click="removeBackground">移除背景</button>
           </div>
         </div>
@@ -193,8 +217,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
-import { getUserById, updateBackground } from '../api/user'
-import request from '../utils/request'
+import { getUserById, updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
 
 const router = useRouter()
 const route = useRoute()
@@ -223,6 +246,12 @@ const currentBackground = ref('')
 const showBackgroundPicker = ref(false)
 const backgroundFileInput = ref(null)
 const previewBackground = ref('')
+const pendingBackgroundFile = ref(null)   // 待上传的背景图文件
+
+const avatarFileInput = ref(null)
+const previewAvatar = ref('')
+const showAvatarActions = ref(false)
+const pendingAvatarFile = ref(null)
 
 const toggleBackgroundPicker = () => {
   if (isOwnProfile.value) {
@@ -230,7 +259,9 @@ const toggleBackgroundPicker = () => {
     if (showBackgroundPicker.value && currentBackground.value) {
       previewBackground.value = currentBackground.value
     } else {
+      // 关闭弹窗 → 丢弃所有本地预览
       previewBackground.value = ''
+      pendingBackgroundFile.value = null
     }
   }
 }
@@ -239,26 +270,39 @@ const triggerBackgroundUpload = () => {
   backgroundFileInput.value?.click()
 }
 
-const handleBackgroundUpload = async (event) => {
+const handleBackgroundUpload = (event) => {
   const file = event.target.files?.[0]
   if (!file) return
 
+  // 仅本地预览，不上传到 OSS！上传在 confirmBackground 点"确认更换"时才执行
+  pendingBackgroundFile.value = file
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    previewBackground.value = ev.target.result
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+const confirmBackground = async () => {
+  if (!pendingBackgroundFile.value) return
+
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    const result = await request.post('/upload/background', formData)
+    const result = await updateBackgroundFile(pendingBackgroundFile.value)
     if (result.code === 200) {
-      currentBackground.value = result.data
-      previewBackground.value = result.data
-      const updateResult = await updateBackground(result.data)
-      if (updateResult.code === 200) {
-        userStore.setUser(updateResult.data)
-      }
+      currentBackground.value = result.data.background
+      previewBackground.value = result.data.background
+      userStore.setUser(result.data)
+      pendingBackgroundFile.value = null
     }
   } catch (err) {
-    console.error('上传背景图片失败', err)
+    console.error('更换背景图失败', err)
   }
+}
+
+const cancelBackground = () => {
+  previewBackground.value = currentBackground.value || ''
+  pendingBackgroundFile.value = null
 }
 
 const removeBackground = async () => {
@@ -270,6 +314,51 @@ const removeBackground = async () => {
   } catch (err) {
     console.error('移除背景失败', err)
   }
+}
+
+const triggerAvatarUpload = () => {
+  avatarFileInput.value?.click()
+}
+
+const handleAvatarSelect = (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  // 本地预览
+  pendingAvatarFile.value = file
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    previewAvatar.value = e.target.result
+    showAvatarActions.value = true
+  }
+  reader.readAsDataURL(file)
+
+  // 重置 input，允许重复选择同一文件
+  event.target.value = ''
+}
+
+const confirmAvatar = async () => {
+  if (!pendingAvatarFile.value) return
+
+  try {
+    const result = await updateAvatar(pendingAvatarFile.value)
+    if (result.code === 200) {
+      userStore.setUser(result.data)
+      // 清除本地预览，使用 OSS 返回的 URL
+      previewAvatar.value = ''
+    }
+  } catch (err) {
+    console.error('更换头像失败', err)
+  } finally {
+    showAvatarActions.value = false
+    pendingAvatarFile.value = null
+  }
+}
+
+const cancelAvatar = () => {
+  previewAvatar.value = ''
+  showAvatarActions.value = false
+  pendingAvatarFile.value = null
 }
 
 const headerStyle = computed(() => {
@@ -480,6 +569,64 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.avatar-editable {
+  cursor: pointer;
+  position: relative;
+}
+
+.avatar-editable:hover .avatar-edit-overlay {
+  opacity: 1;
+}
+
+.avatar-edit-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.avatar-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.avatar-confirm-btn,
+.avatar-cancel-btn {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.avatar-confirm-btn {
+  background: #fe2c55;
+  color: #fff;
+}
+
+.avatar-confirm-btn:hover {
+  background: #e6204a;
+}
+
+.avatar-cancel-btn {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.avatar-cancel-btn:hover {
+  background: #4a4a4a;
 }
 
 .user-details {
@@ -843,8 +990,43 @@ onMounted(() => {
   object-fit: contain;
 }
 
-.remove-bg-btn {
+.bg-actions {
+  display: flex;
+  gap: 12px;
   margin-top: 12px;
+  justify-content: center;
+}
+
+.bg-confirm-btn,
+.bg-cancel-btn {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bg-confirm-btn {
+  background: #fe2c55;
+  color: #fff;
+}
+
+.bg-confirm-btn:hover {
+  background: #e6204a;
+}
+
+.bg-cancel-btn {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.bg-cancel-btn:hover {
+  background: #4a4a4a;
+}
+
+.remove-bg-btn {
+  margin-top: 8px;
   padding: 8px 24px;
   background: #444;
   border: none;

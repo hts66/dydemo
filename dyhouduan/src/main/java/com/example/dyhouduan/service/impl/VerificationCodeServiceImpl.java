@@ -7,13 +7,11 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class VerificationCodeServiceImpl implements VerificationCodeService {
 
     private static final int CODE_LENGTH = 6;
-    private static final int EXPIRATION_MINUTES = 5;
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
@@ -24,7 +22,9 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
     @Override
     public String generateCode(String email) {
         String code = generateRandomCode();
-        redisTemplate.opsForValue().set("email_code:" + email, code, EXPIRATION_MINUTES, TimeUnit.MINUTES);
+        long timestamp = System.currentTimeMillis();
+        String value = code + ":" + timestamp;
+        redisTemplate.opsForValue().set("email_code:" + email, value);
         emailService.sendVerificationCode(email, code);
         return code;
     }
@@ -35,16 +35,32 @@ public class VerificationCodeServiceImpl implements VerificationCodeService {
         if (storedCode == null) {
             return false;
         }
-        boolean valid = storedCode.equals(code);
-        if (valid) {
-            redisTemplate.delete("email_code:" + email);
+        
+        String storedValue = storedCode.toString();
+        if (storedValue.isEmpty()) {
+            return false;
         }
-        return valid;
+        
+        String[] parts = storedValue.split(":");
+        if (parts.length < 2) {
+            return false;
+        }
+        
+        String storedCodeValue = parts[0];
+        long timestamp = Long.parseLong(parts[1]);
+        long now = System.currentTimeMillis();
+        
+        if (now - timestamp > 5 * 60 * 1000) {
+            redisTemplate.opsForValue().set("email_code:" + email, "");
+            return false;
+        }
+        
+        return storedCodeValue.equals(code);
     }
 
     @Override
     public void clearCode(String email) {
-        redisTemplate.delete("email_code:" + email);
+        redisTemplate.opsForValue().set("email_code:" + email, "");
     }
 
     private String generateRandomCode() {

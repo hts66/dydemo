@@ -183,15 +183,17 @@ const loadWorks = async () => {
       for (const work of result.data) {
         work.isLiked = false
         work.isFollowing = false
-        try {
-          const likeResult = await checkIsLiked(work.id)
-          if (likeResult.code === 200) work.isLiked = likeResult.data
-        } catch (e) {}
-        if (userStore.isLoggedIn && work.userId) {
+        if (userStore.isLoggedIn) {
           try {
-            const followResult = await checkIsFollowing(work.userId)
-            if (followResult.code === 200) work.isFollowing = followResult.data
+            const likeResult = await checkIsLiked(work.id)
+            if (likeResult.code === 200) work.isLiked = likeResult.data
           } catch (e) {}
+          if (work.userId) {
+            try {
+              const followResult = await checkIsFollowing(work.userId)
+              if (followResult.code === 200) work.isFollowing = followResult.data
+            } catch (e) {}
+          }
         }
       }
       works.value = result.data

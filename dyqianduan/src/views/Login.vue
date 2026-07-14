@@ -215,7 +215,7 @@ const handleSubmit = async () => {
   loading.value = true
 
   try {
-    const response = await request.post('/auth/login', {
+    const response = await request.post('/auth/login/code', {
       email: form.email,
       password: form.password,
       code: form.code,

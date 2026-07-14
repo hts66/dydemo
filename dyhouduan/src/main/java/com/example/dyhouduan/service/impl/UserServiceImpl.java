@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
@@ -138,6 +139,68 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("用户不存在");
         }
         user.setBackground(background);
+        this.updateById(user);
+        return user;
+    }
+
+    @Override
+    public User updateAvatar(Long userId, MultipartFile file) {
+        User user = this.getById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        // 上传新头像到 OSS（或本地）
+        String newAvatarUrl;
+        if (useOss()) {
+            newAvatarUrl = ossUtil.uploadFile(file, "avatars");
+        } else {
+            newAvatarUrl = fileStorageUtil.uploadFile(file, "avatars");
+        }
+
+        // 删除旧头像
+        String oldAvatar = user.getAvatar();
+        if (oldAvatar != null && !oldAvatar.isEmpty()) {
+            if (useOss()) {
+                ossUtil.deleteFile(oldAvatar);
+            } else {
+                fileStorageUtil.deleteFile(oldAvatar);
+            }
+        }
+
+        // 更新用户头像
+        user.setAvatar(newAvatarUrl);
+        this.updateById(user);
+        return user;
+    }
+
+    @Override
+    public User updateBackgroundFile(Long userId, MultipartFile file) {
+        User user = this.getById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        // 上传新背景图到 OSS（或本地）
+        String newBgUrl;
+        if (useOss()) {
+            newBgUrl = ossUtil.uploadFile(file, "backgrounds");
+        } else {
+            newBgUrl = fileStorageUtil.uploadFile(file, "backgrounds");
+        }
+
+        // 删除旧背景图
+        String oldBg = user.getBackground();
+        if (oldBg != null && !oldBg.isEmpty()) {
+            if (useOss()) {
+                ossUtil.deleteFile(oldBg);
+            } else {
+                fileStorageUtil.deleteFile(oldBg);
+            }
+        }
+
+        // 更新用户背景图
+        user.setBackground(newBgUrl);
         this.updateById(user);
         return user;
     }

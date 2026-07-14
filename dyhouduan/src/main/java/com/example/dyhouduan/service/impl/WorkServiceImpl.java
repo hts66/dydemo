@@ -7,6 +7,8 @@ import com.example.dyhouduan.entity.Work;
 import com.example.dyhouduan.mapper.LikeMapper;
 import com.example.dyhouduan.mapper.WorkMapper;
 import com.example.dyhouduan.service.WorkService;
+import com.example.dyhouduan.config.OssProperties;
+import com.example.dyhouduan.utils.FileStorageUtil;
 import com.example.dyhouduan.utils.OssUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,16 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
 
     @Autowired
     private OssUtil ossUtil;
+
+    @Autowired
+    private FileStorageUtil fileStorageUtil;
+
+    @Autowired
+    private OssProperties ossProperties;
+
+    private boolean useOss() {
+        return ossProperties.getEndpoint() != null && !ossProperties.getEndpoint().isEmpty();
+    }
 
     @Override
     public List<Work> getWorksWithUser(int page, int size) {
@@ -88,8 +100,13 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
             return false;
         }
 
-        ossUtil.deleteFile(work.getUrl());
-        ossUtil.deleteFile(work.getThumbnail());
+        if (useOss()) {
+            ossUtil.deleteFile(work.getUrl());
+            ossUtil.deleteFile(work.getThumbnail());
+        } else {
+            fileStorageUtil.deleteFile(work.getUrl());
+            fileStorageUtil.deleteFile(work.getThumbnail());
+        }
 
         LambdaQueryWrapper<Like> likeWrapper = new LambdaQueryWrapper<>();
         likeWrapper.eq(Like::getWorkId, id);

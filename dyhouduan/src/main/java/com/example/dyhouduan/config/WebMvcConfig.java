@@ -36,7 +36,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(
                     "/api/auth/login",
+                    "/api/auth/login/code",
                     "/api/auth/register",
+                    "/api/auth/register/code",
                     "/api/auth/send-code",
                     "/api/auth/verify-code",
                     "/api/auth/forgot-password",
@@ -48,6 +50,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/api/comments/**",
                     "/api/users/**",
                     "/api/follows/**",
+                    "/api/likes/**",
                     "/api/upload/**",
                     "/api/chat/**",
                     "/error"

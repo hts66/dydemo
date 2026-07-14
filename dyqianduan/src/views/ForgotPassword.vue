@@ -220,9 +220,6 @@ const sendCode = async () => {
         codeCountdown.value = 60
       }
     }, 1000)
-
-    await refreshCaptcha()
-    form.captcha = ''
   } catch (err: any) {
     errorMessage.value = err?.message || '发送验证码失败'
     await refreshCaptcha()

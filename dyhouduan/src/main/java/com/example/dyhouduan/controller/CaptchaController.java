@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/captcha")
@@ -25,7 +24,6 @@ public class CaptchaController {
     private static final int WIDTH = 120;
     private static final int HEIGHT = 40;
     private static final int CODE_LENGTH = 4;
-    private static final int EXPIRATION_MINUTES = 5;
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
@@ -64,7 +62,9 @@ public class CaptchaController {
             }
 
             String captchaKey = UUID.randomUUID().toString();
-            redisTemplate.opsForValue().set("captcha:" + captchaKey, code.toString(), EXPIRATION_MINUTES, TimeUnit.MINUTES);
+            long timestamp = System.currentTimeMillis();
+            String captchaValue = code.toString() + ":" + timestamp;
+            redisTemplate.opsForValue().set("captcha:" + captchaKey, captchaValue);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(image, "png", baos);
