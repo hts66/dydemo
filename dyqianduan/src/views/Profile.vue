@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="my-container" ref="containerRef" @scroll="handleScroll">
     <div 
       class="profile-header-section"
@@ -201,7 +201,6 @@
             <img :src="previewBackground" />
             <div class="bg-actions">
               <button class="bg-confirm-btn" @click.stop="confirmBackground">确认更换</button>
-              <button class="bg-cancel-btn" @click.stop="cancelBackground">取消</button>
             </div>
             <button class="remove-bg-btn" @click="removeBackground">移除背景</button>
           </div>

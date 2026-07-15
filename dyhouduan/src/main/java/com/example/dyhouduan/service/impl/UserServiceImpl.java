@@ -138,6 +138,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
+        // 删除旧的背景文件
+        String oldBg = user.getBackground();
+        if (oldBg != null && !oldBg.isEmpty()) {
+            if (useOss()) {
+                ossUtil.deleteFile(oldBg);
+            } else {
+                fileStorageUtil.deleteFile(oldBg);
+            }
+        }
         user.setBackground(background);
         this.updateById(user);
         return user;

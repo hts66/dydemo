@@ -8,7 +8,7 @@
         :style="{ transform: getSlideTransform(index) }"
       >
         <div class="video-content">
-          <div v-if="videoLoading[index] && !videoLoaded[index]" class="video-loading">
+          <div v-if="videoLoading[index]" class="video-loading">
             <div class="loading-spinner"></div>
             <span class="loading-text">加载中...</span>
           </div>
@@ -26,11 +26,11 @@
           webkit-playsinline
           x5-playsinline
           muted
-          preload="auto"
+          preload="none"
           @loadstart="onVideoLoadStart(index)"
           @loadedmetadata="onVideoLoaded(index)"
           @error="onVideoError(index)"
-          @play="isPlaying[index] = true"
+          @play="onVideoPlay(index)"
           @pause="isPlaying[index] = false"
         ></video>
 
@@ -172,6 +172,9 @@ const currentPage = ref(1)
 const hasMore = ref(true)
 const pageSize = 10
 
+// 播放令牌：防止快速滑动时旧的异步回调覆盖当前状态
+let playToken = 0
+
 let touchStartY = 0
 let touchStartX = 0
 let touchCurrentY = 0
@@ -247,43 +250,56 @@ const loadWorks = async () => {
 
 const playCurrentVideo = async () => {
   await nextTick()
+  const token = ++playToken
+  const targetIndex = currentIndex.value
+
+  // 暂停所有非当前视频，卸载远处视频释放资源
   Object.keys(videoRefs.value).forEach(key => {
     const idx = parseInt(key)
     const v = videoRefs.value[key]
-    if (v && key !== currentIndex.value.toString()) {
+    if (!v) return
+    if (idx !== targetIndex) {
       v.pause()
       isPlaying.value[idx] = false
+      if (Math.abs(idx - targetIndex) > 2) {
+        v.removeAttribute('src')
+        v.load()
+        videoLoaded.value[idx] = false
+        videoLoading.value[idx] = false
+      }
     }
   })
-  const video = videoRefs.value[currentIndex.value]
-  if (video) {
-    video.muted = true
-    if (video.readyState >= 2) {
-      video.play().then(() => {
-        isPlaying.value[currentIndex.value] = true
-        videoLoading.value[currentIndex.value] = false
-      }).catch(e => {
-        console.error('播放失败:', e)
-        videoLoading.value[currentIndex.value] = false
-      })
-      isPlaying.value[currentIndex.value] = true
-    } else {
-      videoLoading.value[currentIndex.value] = true
-      video.addEventListener('loadedmetadata', () => {
-        video.play().then(() => {
-          isPlaying.value[currentIndex.value] = true
-          videoLoading.value[currentIndex.value] = false
-        }).catch(e => {
-          console.error('播放失败:', e)
-          videoLoading.value[currentIndex.value] = false
-        })
-        isPlaying.value[currentIndex.value] = true
-      }, { once: true })
-      video.addEventListener('error', () => {
-        videoLoading.value[currentIndex.value] = false
-      }, { once: true })
-    }
+
+  const video = videoRefs.value[targetIndex]
+  if (!video) return
+
+  video.muted = true
+  video.currentTime = 0
+
+  // 核心修复：总是走 load() → canplay → play() 流程
+  // 不依赖浏览器的预加载状态，每次切视频都重新加载
+  videoLoading.value[targetIndex] = true
+
+  const onCanPlay = () => {
+    if (token !== playToken) return
+    video.play().catch(e => {
+      if (token !== playToken) return
+      console.error('播放失败:', e)
+      videoLoading.value[targetIndex] = false
+    })
+    // 播放成功后由 @play 事件触发 onVideoPlay 来更新状态
   }
+
+  const onError = () => {
+    if (token !== playToken) return
+    videoLoading.value[targetIndex] = false
+    console.error('视频加载失败:', targetIndex)
+  }
+
+  video.addEventListener('canplay', onCanPlay, { once: true })
+  video.addEventListener('error', onError, { once: true })
+  video.load()
+
   reportWatch()
 }
 
@@ -293,19 +309,18 @@ const reportWatch = () => {
   recordWatchHistory({ workId: work.id, watchDuration: 0, isComplete: false }).catch(() => {})
 }
 
+// loadedmetadata 事件：浏览器获得了视频元数据，但还不足以播放
 const onVideoLoaded = (index) => {
+  // 不在这里设置 videoLoaded=true，因为 loadedmetadata 不代表有可显示的帧
+  // videoLoaded 只在 @play（onVideoPlay）中设置，确保占位图不会过早消失
+  videoLoading.value[index] = false
+}
+
+// @play 事件：视频真正开始渲染第一帧，此时才隐藏占位图
+const onVideoPlay = (index) => {
+  isPlaying.value[index] = true
   videoLoaded.value[index] = true
   videoLoading.value[index] = false
-  if (index === currentIndex.value) {
-    const video = videoRefs.value[index]
-    if (video) {
-      video.muted = true
-      video.play().then(() => {
-        isPlaying.value[index] = true
-      }).catch(e => console.error('视频自动播放失败:', e))
-      isPlaying.value[index] = true
-    }
-  }
 }
 
 const onVideoError = (index) => {
@@ -386,18 +401,24 @@ const switchVideo = (direction) => {
   const newIndex = currentIndex.value + direction
   if (newIndex < 0 || newIndex >= works.value.length) {
     animateOffsetTo(0)
-    // 滑到底部时尝试加载更多推荐
     if (direction > 0) loadWorks()
     return
   }
   isAnimating.value = true
+  // 提前预加载下一个视频
+  const preloadIndex = newIndex + direction
+  if (preloadIndex >= 0 && preloadIndex < works.value.length) {
+    const preloadVideo = videoRefs.value[preloadIndex]
+    if (preloadVideo && preloadVideo.readyState < 2) {
+      preloadVideo.load()
+    }
+  }
   const targetOffset = direction * window.innerHeight
   animateOffsetTo(targetOffset, () => {
     offsetY.value = 0
     currentIndex.value = newIndex
     isAnimating.value = false
     playCurrentVideo()
-    // 临近末尾时预加载下一页
     if (newIndex >= works.value.length - 2) loadWorks()
   })
 }
@@ -461,7 +482,6 @@ const handleFollow = async (work) => {
   try {
     const result = await toggleFollow(followeeId)
     if (result.code === 200) {
-      // 同步更新同一作者的所有卡片关注态
       works.value.forEach(w => {
         if (w.userId === followeeId) w.isFollowing = result.data
       })
