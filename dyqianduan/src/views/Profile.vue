@@ -1,11 +1,12 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="my-container" ref="containerRef" @scroll="handleScroll">
-    <div 
+    <div
       class="profile-header-section"
+      :class="{ 'header-editable': isOwnProfile }"
       :style="headerStyle"
-      @click="toggleBackgroundPicker"
+      @click="isOwnProfile && toggleBackgroundPicker()"
     >
-      <div class="background-hint">
+      <div v-if="isOwnProfile" class="background-hint">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
           <path d="M20.71 4.04a1 1 0 0 0-1.42 0l-3.02 3.02-7.19-7.19a1 1 0 0 0-1.42 0L3.29 5.36a1 1 0 0 0 0 1.42l7.19 7.19-3.02 3.02a1 1 0 0 0 0 1.42l2.12 2.12a1 1 0 0 0 1.42 0l3.02-3.02 7.19 7.19a1 1 0 0 0 1.42 0l2.12-2.12a1 1 0 0 0 0-1.42l-7.19-7.19 3.02-3.02a1 1 0 0 0 0-1.42z"/>
         </svg>
@@ -511,9 +512,12 @@ onMounted(() => {
   padding: 20px 60px;
   padding-bottom: 30px;
   position: relative;
-  cursor: pointer;
   overflow: hidden;
   transition: height 0.1s ease-out;
+}
+
+.header-editable {
+  cursor: pointer;
 }
 
 .profile-header-section::after {

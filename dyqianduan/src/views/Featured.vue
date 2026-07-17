@@ -26,7 +26,8 @@
           <p class="video-description" v-if="work.description">{{ work.description }}</p>
           <div class="video-meta">
             <div class="author-section">
-              <button 
+              <button
+                v-if="!isOwnVideo(work)"
                 class="author-follow-btn"
                 :class="{ followed: work.isFollowing }"
                 @click.stop="handleFollow(work)"
@@ -71,13 +72,13 @@
               controls
               autoplay
               loop
-              muted
             ></video>
           </div>
           <div class="interaction-section">
             <div class="author-bar">
-              <button 
-                class="follow-btn" 
+              <button
+                v-if="!isOwnVideo(currentVideo)"
+                class="follow-btn"
                 :class="{ followed: currentVideo.isFollowing }"
                 @click.stop="handleFollow"
               >
@@ -244,8 +245,16 @@ const openVideo = async (work) => {
   
   if (videoPlayer.value) {
     videoPlayer.value.currentTime = 0
-    videoPlayer.value.muted = true
-    videoPlayer.value.play().catch(e => console.error('播放失败', e))
+    videoPlayer.value.muted = false
+    videoPlayer.value.play().catch(e => {
+      // 浏览器阻止不静音自动播放时，回退到静音
+      if (e.name === 'NotAllowedError') {
+        videoPlayer.value.muted = true
+        videoPlayer.value.play().catch(err => console.error('播放失败', err))
+      } else {
+        console.error('播放失败', e)
+      }
+    })
   }
 }
 
@@ -349,6 +358,11 @@ const formatDuration = (seconds) => {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+const isOwnVideo = (work) => {
+  if (!userStore.isLoggedIn || !userStore.user || !work) return false
+  return work.userId === userStore.user.id
 }
 
 const formatTime = (dateStr) => {

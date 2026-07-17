@@ -94,6 +94,20 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
 
     @Override
     @Transactional
+    public int batchPublishWorks(Long userId, List<Work> works) {
+        for (Work work : works) {
+            work.setUserId(userId);
+            work.setType(2);
+            work.setLikesCount(0);
+            work.setCommentsCount(0);
+            work.setViews(0);
+        }
+        saveBatch(works);
+        return works.size();
+    }
+
+    @Override
+    @Transactional
     public boolean deleteWorkWithLikes(Long id) {
         Work work = getById(id);
         if (work == null) {

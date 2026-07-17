@@ -22,4 +22,6 @@ public interface WorkService extends IService<Work> {
     List<Work> getRecommendWorks(Long userId, int page, int size);
 
     void incrementViews(Long workId);
+
+    int batchPublishWorks(Long userId, List<Work> works);
 }

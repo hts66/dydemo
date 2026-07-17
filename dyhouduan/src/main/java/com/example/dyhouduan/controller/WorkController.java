@@ -1,8 +1,10 @@
 package com.example.dyhouduan.controller;
 
 import com.example.dyhouduan.dto.Response;
+import com.example.dyhouduan.entity.User;
 import com.example.dyhouduan.entity.Work;
 import com.example.dyhouduan.service.FollowService;
+import com.example.dyhouduan.service.UserService;
 import com.example.dyhouduan.service.WorkService;
 import com.example.dyhouduan.service.WatchHistoryService;
 import com.example.dyhouduan.utils.JwtUtil;
@@ -25,6 +27,9 @@ public class WorkController {
 
     @Autowired
     private FollowService followService;
+
+    @Autowired
+    private UserService userService;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -219,6 +224,49 @@ public class WorkController {
         } catch (Exception e) {
             log.error("获取推荐视频失败", e);
             return Response.error("获取推荐视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 种子数据批量导入 — 通过邮箱指定发布者
+     * Body: { "email": "2703605029@qq.com", "works": [ { "url":"...", "thumbnail":"...", "title":"...", "description":"..." }, ... ] }
+     */
+    @PostMapping("/seed")
+    public Response<Map<String, Object>> seedWorks(@RequestBody Map<String, Object> body) {
+        try {
+            String email = (String) body.get("email");
+            if (email == null || email.isEmpty()) {
+                return Response.error("email 不能为空");
+            }
+
+            User user = userService.findByEmail(email);
+            if (user == null) {
+                return Response.error("用户不存在: " + email);
+            }
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rawList = (List<Map<String, Object>>) body.get("works");
+            if (rawList == null || rawList.isEmpty()) {
+                return Response.error("works 列表不能为空");
+            }
+
+            List<Work> works = new ArrayList<>();
+            for (Map<String, Object> raw : rawList) {
+                Work w = new Work();
+                w.setUrl((String) raw.get("url"));
+                w.setThumbnail((String) raw.get("thumbnail"));
+                w.setTitle((String) raw.get("title"));
+                w.setDescription((String) raw.get("description"));
+                works.add(w);
+            }
+
+            int count = workService.batchPublishWorks(user.getId(), works);
+
+            Map<String, Object> result = Map.of("count", count, "userId", user.getId());
+            return Response.success("批量导入成功", result);
+        } catch (Exception e) {
+            log.error("种子数据导入失败", e);
+            return Response.error("导入失败: " + e.getMessage());
         }
     }
 
