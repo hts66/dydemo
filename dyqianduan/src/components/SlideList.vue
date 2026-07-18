@@ -132,25 +132,15 @@
     <Teleport to="body">
       <div v-if="showShare" class="share-overlay" @click.self="showShare = false">
         <div class="share-modal">
-          <h3>分享到</h3>
-          <div class="share-options">
-            <div class="share-option" @click="copyLink">
-              <div class="share-icon">🔗</div>
-              <span>复制链接</span>
-            </div>
-            <div class="share-option">
-              <div class="share-icon">💬</div>
-              <span>微信</span>
-            </div>
-            <div class="share-option">
-              <div class="share-icon">🐦</div>
-              <span>微博</span>
-            </div>
-            <div class="share-option">
-              <div class="share-icon">📱</div>
-              <span>朋友圈</span>
+          <h3>分享给好友</h3>
+          <div class="share-friend-list">
+            <div v-if="friends.length === 0" class="share-no-friends">你还没有好友，快去添加好友吧</div>
+            <div v-for="f in friends" :key="f.id" class="share-friend-row" @click="doShare(f)">
+              <img :src="f.avatar || defaultAvatar" />
+              <span>{{ f.username }}</span>
             </div>
           </div>
+          <div v-if="shareOk" class="share-ok">已分享 ✓</div>
           <button class="cancel-share-btn" @click="showShare = false">取消</button>
         </div>
       </div>
@@ -171,10 +161,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getRecommendWorks, recordWatchHistory } from '../api/work'
+import { getRecommendWorks, getFriendsWorks, getFollowingWorks, recordWatchHistory } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
-import { toggleFollow, checkIsFollowing } from '../api/follow'
+import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
+import { sendMessage } from '../api/message'
 import SlideVerticalInfinite from './SlideVerticalInfinite.vue'
 import BaseVideo from './BaseVideo.vue'
 import { on, off, EVENT_KEY } from '../utils/bus'
@@ -182,6 +173,11 @@ import { on, off, EVENT_KEY } from '../utils/bus'
 const router = useRouter()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+
+const props = defineProps({
+  apiType: { type: String, default: 'recommend' },
+  userId: { type: Number, default: null }
+})
 
 const slideRef = ref(null)
 const commentListRef = ref(null)
@@ -214,14 +210,28 @@ const getData = async (refresh = false) => {
   await loadWorks()
 }
 
+const fetchApi = async (page) => {
+  const uid = props.userId || userStore.user?.id || 1
+  if (props.apiType === 'friends') {
+    const r = await getFriendsWorks(uid)
+    hasMore.value = false  // 朋友作品不分页
+    return r
+  }
+  if (props.apiType === 'following') {
+    const r = await getFollowingWorks(uid)
+    hasMore.value = false  // 关注作品不分页
+    return r
+  }
+  return getRecommendWorks(page, pageSize)
+}
+
 const refreshData = async () => {
   isRefreshing.value = true
   currentPage.value = 1
   hasMore.value = true
-  const oldWorks = [...works.value]
 
   try {
-    const result = await getRecommendWorks(1, pageSize)
+    const result = await fetchApi(1)
 
     if (result.code === 200 && result.data.length > 0) {
       const newWorks = await enrichWorks(result.data)
@@ -234,7 +244,7 @@ const refreshData = async () => {
       }
     }
   } catch (err) {
-    console.error('刷新推荐视频失败', err)
+    console.error('刷新视频失败', err)
   } finally {
     isRefreshing.value = false
   }
@@ -245,7 +255,7 @@ const loadWorks = async () => {
   isLoading.value = true
 
   try {
-    const result = await getRecommendWorks(currentPage.value, pageSize)
+    const result = await fetchApi(currentPage.value)
 
     if (result.code === 200 && result.data.length > 0) {
       const enriched = await enrichWorks(result.data)
@@ -390,19 +400,26 @@ const sendComment = async () => {
 }
 
 // ── Share ─────────────────────────────────────────────
-const handleShare = (work) => {
+const friends = ref([])
+const shareOk = ref(false)
+const handleShare = async (work) => {
   currentWork.value = work
   showShare.value = true
+  shareOk.value = false
+  if (userStore.user?.id) {
+    try { const r = await getFriends(userStore.user.id); if (r.code === 200) friends.value = r.data || [] } catch (_) { friends.value = [] }
+  }
 }
 
-const copyLink = () => {
-  const url = `${window.location.origin}/video/${currentWork.value?.id}`
-  navigator.clipboard.writeText(url).then(() => {
-    alert('链接已复制！')
-    showShare.value = false
-  }).catch(() => {
-    alert('复制失败，请手动复制')
-  })
+const doShare = async (friend) => {
+  const w = currentWork.value
+  if (!w) return
+  const title = w.title || '无标题'
+  try {
+    await sendMessage(friend.id, `📹 [分享视频] ${title}\n${w.url}`)
+    shareOk.value = true
+    setTimeout(() => { showShare.value = false; shareOk.value = false }, 1000)
+  } catch (_) {}
 }
 
 // ── Navigation ────────────────────────────────────────
@@ -855,6 +872,13 @@ defineExpose({
   font-size: 15px;
   cursor: pointer;
 }
+.share-friend-list { max-height: 240px; overflow-y: auto; margin-bottom: 12px; }
+.share-friend-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; border-radius: 8px; transition: background 0.15s; }
+.share-friend-row:hover { background: #3a3a3a; }
+.share-friend-row img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.share-friend-row span { color: #fff; font-size: 14px; }
+.share-no-friends { padding: 24px; text-align: center; color: #888; font-size: 13px; }
+.share-ok { text-align: center; color: #2ecc71; font-size: 13px; padding: 8px 0; }
 
 /* ── States ────────────────────────────────────────── */
 .initial-loading,

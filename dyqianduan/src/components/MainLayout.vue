@@ -162,7 +162,18 @@
             >
               <img :src="msg.senderId === userStore.user?.id ? (userStore.user?.avatar || defaultAvatar) : (msg.senderAvatar || defaultAvatar)" class="msg-avatar" />
               <div class="msg-content">
-                <span class="msg-text">{{ msg.content }}</span>
+                <template v-if="isShareMsg(msg.content)">
+                  <div class="share-video-card" @click.stop="playSharedVideo(msg.content)">
+                    <div class="share-video-thumb">
+                      <svg viewBox="0 0 24 24" width="36" height="36" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <div class="share-video-info">
+                      <span class="share-video-label">📹 分享的视频</span>
+                      <span class="share-video-title">{{ getShareTitle(msg.content) }}</span>
+                    </div>
+                  </div>
+                </template>
+                <span v-else class="msg-text">{{ msg.content }}</span>
                 <span class="msg-time">{{ formatMsgTime(msg.createdAt) }}</span>
               </div>
             </div>
@@ -185,6 +196,14 @@
             </svg>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 分享视频播放器 -->
+    <div v-if="showSharedVideo" class="shared-video-overlay" @click.self="closeSharedVideo">
+      <div class="shared-video-modal">
+        <button class="shared-video-close" @click="closeSharedVideo">✕</button>
+        <video :src="sharedVideoUrl" class="shared-video-player" controls autoplay></video>
       </div>
     </div>
   </div>
@@ -379,6 +398,31 @@ const formatMsgTime = (dateStr) => {
   const hours = date.getHours().toString().padStart(2, '0')
   const minutes = date.getMinutes().toString().padStart(2, '0')
   return `${hours}:${minutes}`
+}
+
+// 分享视频相关
+const sharedVideoUrl = ref('')
+const showSharedVideo = ref(false)
+
+const isShareMsg = (content) => content && content.startsWith('📹 [分享视频]')
+const getShareTitle = (content) => {
+  const lines = content.split('\n')
+  return lines[0]?.replace('📹 [分享视频] ', '') || '无标题'
+}
+const getShareUrl = (content) => {
+  const lines = content.split('\n')
+  return lines[1] || ''
+}
+const playSharedVideo = (content) => {
+  const url = getShareUrl(content)
+  if (url) {
+    sharedVideoUrl.value = `/api/video/proxy?url=${encodeURIComponent(url)}`
+    showSharedVideo.value = true
+  }
+}
+const closeSharedVideo = () => {
+  showSharedVideo.value = false
+  sharedVideoUrl.value = ''
 }
 </script>
 
@@ -957,4 +1001,45 @@ const formatMsgTime = (dateStr) => {
   position: relative;
   min-height: 0;
 }
+
+/* 分享视频卡片 */
+.share-video-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  max-width: 280px;
+}
+.share-video-card:hover { background: #3a3a3a; }
+.share-video-thumb {
+  width: 56px; height: 56px;
+  background: linear-gradient(135deg, #fe2c55, #ff6b81);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.share-video-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+.share-video-label { font-size: 11px; color: #fe2c55; }
+.share-video-title { font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 分享视频播放器 */
+.shared-video-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.95); z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+}
+.shared-video-modal {
+  position: relative; width: 90%; max-width: 800px;
+}
+.shared-video-close {
+  position: absolute; top: -40px; right: 0;
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.2); border: none; border-radius: 50%;
+  color: #fff; font-size: 18px; cursor: pointer; z-index: 10;
+}
+.shared-video-player { width: 100%; border-radius: 8px; }
 </style>

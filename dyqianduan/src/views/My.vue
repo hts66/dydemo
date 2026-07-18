@@ -276,14 +276,17 @@
                 </svg>
                 <span>{{ currentVideo.likesCount || 0 }}</span>
               </button>
-              <div class="share-wrapper" v-if="currentVideo.userId !== userStore.user?.id">
+              <div class="share-wrapper">
                 <button class="action-btn" @click.stop="toggleSharePopup">
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">
                     <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
                   </svg>
                 </button>
                 <div class="share-popup" v-if="showSharePopup" @click.stop>
-                  <div class="share-popup-header">分享给好友</div>
+                  <div class="share-popup-header">
+                    分享给好友
+                    <button class="share-popup-close" @click="showSharePopup = false; shareSuccess = false">✕</button>
+                  </div>
                   <div class="share-popup-list">
                     <div v-if="friends.length === 0" class="share-no-friends">
                       <p>你还没有好友，快去添加好友吧</p>
@@ -1844,7 +1847,9 @@ onMounted(() => {
   width: 220px; background: #2a2a2a; border-radius: 12px; overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.4); z-index: 100;
 }
-.share-popup-header { padding: 12px 16px; font-size: 14px; font-weight: 500; color: #fff; border-bottom: 1px solid #3a3a3a; }
+.share-popup-header { padding: 12px 16px; font-size: 14px; font-weight: 500; color: #fff; border-bottom: 1px solid #3a3a3a; display: flex; align-items: center; justify-content: space-between; }
+.share-popup-close { background: none; border: none; color: #888; font-size: 16px; cursor: pointer; }
+.share-popup-close:hover { color: #fff; }
 .share-popup-list { max-height: 240px; overflow-y: auto; }
 .share-no-friends { padding: 24px 16px; text-align: center; color: #888; font-size: 13px; }
 .share-friend-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; transition: background 0.15s; }
