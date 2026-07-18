@@ -27,4 +27,15 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         save(message);
         return baseMapper.selectById(message.getId());
     }
+
+    @Override
+    public Message saveBotMessage(Long userId, String content) {
+        Message message = new Message();
+        message.setSenderId(-1L);   // AI 机器人固定 ID
+        message.setReceiverId(userId);
+        message.setContent(content);
+        message.setCreatedAt(LocalDateTime.now());
+        save(message);
+        return message;
+    }
 }

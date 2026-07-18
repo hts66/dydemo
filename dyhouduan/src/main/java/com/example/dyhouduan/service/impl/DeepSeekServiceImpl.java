@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,12 +32,25 @@ public class DeepSeekServiceImpl implements DeepSeekService {
 
     @Override
     public String chat(String message) {
+        return callApi(List.of(
+                Map.of("role", "user", "content", message)
+        ));
+    }
+
+    @Override
+    public String chatWithHistory(List<Map<String, String>> messages) {
+        List<Map<String, String>> full = new ArrayList<>();
+        full.add(Map.of("role", "system", "content",
+            "你是短视频平台AI助手\"小助\"，活泼可爱、热情友好。回复简洁自然，像朋友聊天，2-4句话即可。"));
+        full.addAll(messages);
+        return callApi(full);
+    }
+
+    private String callApi(List<Map<String, String>> messages) {
         try {
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", deepSeekConfig.getModel());
-            requestBody.put("messages", List.of(
-                    Map.of("role", "user", "content", message)
-            ));
+            requestBody.put("messages", messages);
             requestBody.put("temperature", 0.7);
 
             String jsonBody = objectMapper.writeValueAsString(requestBody);

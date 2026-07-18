@@ -10,4 +10,6 @@ public interface MessageService extends IService<Message> {
     List<Message> getChatMessages(Long userId, Long otherUserId);
 
     Message sendMessage(Long senderId, Long receiverId, String content);
+
+    Message saveBotMessage(Long userId, String content);
 }

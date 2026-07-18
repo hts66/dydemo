@@ -54,6 +54,21 @@ public class MessageController {
         }
     }
 
+    @PostMapping("/bot")
+    public Response<Message> saveBotMessage(@RequestBody MessageRequest request, HttpServletRequest httpRequest) {
+        try {
+            Long userId = getUserIdFromToken(httpRequest);
+            if (userId == null) {
+                return Response.error(401, "未登录");
+            }
+            Message message = messageService.saveBotMessage(userId, request.getContent());
+            return Response.success(message);
+        } catch (Exception e) {
+            log.error("保存机器人消息失败", e);
+            return Response.error("保存机器人消息失败: " + e.getMessage());
+        }
+    }
+
     public static class MessageRequest {
         private Long receiverId;
         private String content;

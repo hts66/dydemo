@@ -53,6 +53,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/api/likes/**",
                     "/api/upload/**",
                     "/api/chat/**",
+                    "/api/messages/**",
                     "/error"
                 );
     }

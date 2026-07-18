@@ -86,6 +86,26 @@
             <span class="action-count">{{ formatCount(work.commentsCount) }}</span>
           </div>
 
+          <div class="action-item share-action" @click.stop="toggleSharePopup(work)">
+            <div class="action-icon-wrapper">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
+                <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
+              </svg>
+            </div>
+            <span class="action-count">分享</span>
+          </div>
+
+          <div class="share-popup-overlay" v-if="shareWork?.id === work.id" @click.stop>
+            <div class="share-popup-header">分享给好友</div>
+            <div class="share-popup-list">
+              <div v-if="friends.length === 0" class="share-no-friends">你还没有好友，快去添加好友吧</div>
+              <div v-for="f in friends" :key="f.id" class="share-friend-item" @click="shareToFriend(f, work)">
+                <img :src="f.avatar || defaultAvatar" /><span>{{ f.username }}</span>
+              </div>
+            </div>
+            <div v-if="shareOk" class="share-success">已分享 ✓</div>
+          </div>
+
           <div class="action-item">
             <div class="action-icon-wrapper">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
@@ -143,7 +163,8 @@ import { useUserStore } from '../stores/user'
 import { getFriendsWorks } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
-import { toggleFollow, checkIsFollowing } from '../api/follow'
+import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
+import { sendMessage } from '../api/message'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -156,6 +177,9 @@ const videoLoaded = ref({})
 const videoLoading = ref({})
 const currentIndex = ref(0)
 const showComments = ref(false)
+const shareWork = ref(null)
+const shareOk = ref(false)
+const friends = ref([])
 const currentWork = ref(null)
 const comments = ref([])
 const commentInput = ref('')
@@ -414,6 +438,24 @@ const handleLike = async (work) => {
   } catch (err) {
     console.error('点赞失败', err)
   }
+}
+
+const toggleSharePopup = async (work) => {
+  if (shareWork.value?.id === work.id) { shareWork.value = null; shareOk.value = false; return }
+  shareWork.value = work
+  shareOk.value = false
+  if (userStore.user?.id) {
+    try { const r = await getFriends(userStore.user.id); if (r.code === 200) friends.value = r.data || [] } catch (_) { friends.value = [] }
+  }
+}
+
+const shareToFriend = async (friend, work) => {
+  const title = work.title || '无标题'
+  try {
+    await sendMessage(friend.id, `📹 [分享视频] ${title}\n${work.url}`)
+    shareOk.value = true
+    setTimeout(() => { shareWork.value = null; shareOk.value = false }, 1000)
+  } catch (_) {}
 }
 
 const handleFollow = async (work) => {

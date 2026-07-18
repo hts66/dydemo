@@ -7,3 +7,7 @@ export const getChatMessages = (otherUserId) => {
 export const sendMessage = (receiverId, content) => {
   return request.post('/messages', { receiverId, content })
 }
+
+export const saveBotMessage = (content) => {
+  return request.post('/messages/bot', { content })
+}

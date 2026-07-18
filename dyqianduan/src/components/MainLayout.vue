@@ -15,11 +15,13 @@
           </svg>
           <span>推荐</span>
         </div>
-        <div class="nav-item" @click="showAiSearchTip">
+        <div class="nav-item" @click="openAiChat">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
+            <circle cx="9" cy="10" r="1.5"/>
+            <circle cx="15" cy="10" r="1.5"/>
           </svg>
-          <span>AI 搜索</span>
+          <span>AI 对话</span>
         </div>
       </nav>
 
@@ -109,13 +111,23 @@
           </button>
         </div>
         <div class="chat-sidebar-content">
+          <div
+            class="chat-sidebar-item ai-bot-item"
+            :class="{ 'active': currentChatFriend?.id === AI_BOT.id }"
+            @click="openAiChat"
+          >
+            <img :src="AI_BOT.avatar" />
+            <span class="chat-sidebar-name">{{ AI_BOT.username }}</span>
+            <span class="ai-badge">AI</span>
+          </div>
+          <div class="sidebar-divider"></div>
           <div v-if="friends.length === 0" class="no-friends">
             <p>你还没有好友</p>
             <p class="no-friends-hint">快去添加好友吧</p>
           </div>
-          <div 
-            v-for="friend in friends" 
-            :key="friend.id" 
+          <div
+            v-for="friend in friends"
+            :key="friend.id"
             class="chat-sidebar-item"
             :class="{ 'active': currentChatFriend?.id === friend.id }"
             @click="openChat(friend)"
@@ -183,12 +195,18 @@ import { ref, nextTick } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
 import { getFriends } from '../api/follow'
-import { getChatMessages, sendMessage } from '../api/message'
+import { getChatMessages, sendMessage, saveBotMessage } from '../api/message'
 import request from '../utils/request'
 
 const userStore = useUserStore()
 const router = useRouter()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+
+const AI_BOT = {
+  id: -1,
+  username: 'AI 助手',
+  avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#fe2c55"/><text x="50" y="70" text-anchor="middle" font-size="52" font-weight="bold" fill="white" font-family="Arial">AI</text></svg>'),
+}
 
 const showFriends = ref(false)
 const friends = ref([])
@@ -210,8 +228,34 @@ const goToFollowing = () => {
   router.push('/following')
 }
 
-const showAiSearchTip = () => {
-  alert('该功能尚未开发')
+const openAiChat = async () => {
+  // 如果已经在和AI聊天，不清空现有消息
+  const wasAiChat = currentChatFriend.value?.id === AI_BOT.id
+  currentChatFriend.value = AI_BOT
+  showChat.value = true
+  chatInput.value = ''
+
+  if (!wasAiChat) {
+    chatMessages.value = []
+    // 从数据库加载AI聊天历史
+    if (userStore.user?.id) {
+      try {
+        const result = await getChatMessages(AI_BOT.id)
+        if (result.code === 200 && result.data) {
+          chatMessages.value = result.data.map(msg => ({
+            id: msg.id,
+            content: msg.content,
+            senderId: msg.senderId,
+            senderUsername: msg.senderId === AI_BOT.id ? AI_BOT.username : (msg.senderUsername || '我'),
+            senderAvatar: msg.senderId === AI_BOT.id ? AI_BOT.avatar : (msg.senderAvatar || defaultAvatar),
+            createdAt: msg.createdAt
+          }))
+        }
+      } catch (_) {}
+    }
+  }
+  await nextTick()
+  scrollToBottom()
 }
 
 const showFriendsPopup = async () => {
@@ -266,51 +310,58 @@ const closeChat = () => {
 
 const sendChatMessage = async () => {
   if (!chatInput.value.trim() || !currentChatFriend.value || !userStore.user?.id) return
-  
+
   const message = chatInput.value.trim()
-  
+  chatInput.value = ''
+
+  // 立即在界面显示用户消息
+  chatMessages.value.push({
+    id: Date.now(),
+    content: message,
+    senderId: userStore.user.id,
+    senderUsername: userStore.user.username || '我',
+    senderAvatar: userStore.user.avatar || defaultAvatar,
+    createdAt: new Date().toISOString()
+  })
+  await nextTick()
+  scrollToBottom()
+
   try {
-    if (message.includes('@机器人')) {
-      chatMessages.value.push({
-        id: Date.now(),
-        content: message,
-        senderId: userStore.user.id,
-        senderUsername: userStore.user.username,
-        senderAvatar: userStore.user.avatar,
-        createdAt: new Date().toISOString()
-      })
-      chatInput.value = ''
-      await nextTick()
-      scrollToBottom()
-      
-      const botMessage = message.replace('@机器人', '').trim() || '你好'
-      const botResult = await request.post('/chat/bot', { message: botMessage })
+    // 模式1: AI 助手聊天
+    if (currentChatFriend.value.id === AI_BOT.id) {
+      // 后台持久化用户消息（不阻塞UI）
+      sendMessage(AI_BOT.id, message).catch(() => {})
+
+      // 构建对话历史
+      const history = []
+      for (const msg of chatMessages.value) {
+        if (msg.senderId === AI_BOT.id) {
+          history.push({ role: 'assistant', content: msg.content })
+        } else if (msg.senderId === userStore.user.id) {
+          history.push({ role: 'user', content: msg.content })
+        }
+      }
+      const botResult = await request.post('/chat/bot', { messages: history })
       if (botResult.code === 200) {
-        chatMessages.value.push({
+        const botMsg = {
           id: Date.now() + 1,
           content: botResult.data,
-          senderId: 0,
-          senderUsername: '机器人',
-          senderAvatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+          senderId: AI_BOT.id,
+          senderUsername: AI_BOT.username,
+          senderAvatar: AI_BOT.avatar,
           createdAt: new Date().toISOString()
-        })
+        }
+        chatMessages.value.push(botMsg)
+        // 后台持久化AI回复
+        saveBotMessage(botResult.data).catch(() => {})
         await nextTick()
         scrollToBottom()
       }
-    } else {
-      const result = await sendMessage(currentChatFriend.value.id, message)
-      if (result.code === 200) {
-        chatMessages.value.push({
-          ...result.data,
-          senderId: userStore.user.id,
-          senderUsername: userStore.user.username,
-          senderAvatar: userStore.user.avatar
-        })
-        chatInput.value = ''
-        await nextTick()
-        scrollToBottom()
-      }
+      return
     }
+
+    // 模式2: 普通好友聊天
+    sendMessage(currentChatFriend.value.id, message).catch(() => {})
   } catch (err) {
     console.error('发送消息失败', err)
   }
@@ -878,6 +929,26 @@ const formatMsgTime = (dateStr) => {
   font-size: 11px;
   color: #888;
   margin-top: 4px !important;
+}
+
+.ai-bot-item {
+  position: relative;
+}
+
+.ai-badge {
+  margin-left: auto;
+  padding: 2px 6px;
+  background: linear-gradient(135deg, #fe2c55, #ff6b81);
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: #3a3a3a;
+  margin: 4px 12px;
 }
 
 .page-content {
