@@ -190,7 +190,7 @@
         <div 
           v-for="user in followingList" 
           :key="user.id" 
-          class="user-item"
+          class="user-item" @click="goToProfile(user.id)"
           :class="{ 'batch-selected': isBatchMode && selectedItems.includes(user.id) }"
         >
           <input 
@@ -208,7 +208,7 @@
           <button 
             v-if="!isBatchMode"
             class="follow-btn following" 
-            @click="handleFollow(user.id)"
+            @click.stop="handleFollow(user.id)"
           >
             已关注
           </button>
@@ -219,7 +219,7 @@
       </div>
 
       <div v-if="activeTab === 'followers'" class="user-list">
-        <div v-for="user in followerList" :key="user.id" class="user-item">
+        <div v-for="user in followerList" :key="user.id" class="user-item" @click="goToProfile(user.id)">
           <img :src="user.avatar || defaultAvatar" class="user-avatar" />
           <div class="user-info">
             <span class="user-name">{{ user.username || '匿名用户' }}</span>
@@ -491,7 +491,7 @@ const handleBackgroundUpload = (event) => {
   const file = event.target.files?.[0]
   if (!file) return
 
-  // 仅本地预览，不上传到 OSS！上传在 confirmBackground 点"确认更换"时才执行
+  // 仅本地预览，不上传到 MinIO！上传在 confirmBackground 点"确认更换"时才执行
   pendingBackgroundFile.value = file
   const reader = new FileReader()
   reader.onload = (ev) => {
@@ -574,7 +574,7 @@ const openEditModal = () => {
 
 const closeEditModal = () => {
   showEditModal.value = false
-  // 取消编辑 → 丢弃本地预览，什么都不上传到 OSS
+  // 取消编辑 → 丢弃本地预览，什么都不上传到 MinIO
   pendingAvatarFile.value = null
   editForm.value.avatar = originalAvatar.value
 }
@@ -595,7 +595,7 @@ const handleAvatarChange = (e) => {
     return
   }
 
-  // 仅本地预览，不上传到 OSS！上传在 saveProfile 点"保存"时才执行
+  // 仅本地预览，不上传到 MinIO！上传在 saveProfile 点"保存"时才执行
   pendingAvatarFile.value = file
   const reader = new FileReader()
   reader.onload = (ev) => {
@@ -616,7 +616,7 @@ const saveProfile = async () => {
   editSuccess.value = false
 
   try {
-    // 只有点"保存"时才真正上传头像到 OSS
+    // 只有点"保存"时才真正上传头像到 MinIO
     if (pendingAvatarFile.value) {
       const avatarResult = await updateAvatar(pendingAvatarFile.value)
       if (avatarResult.code !== 200) {
@@ -624,7 +624,7 @@ const saveProfile = async () => {
         saving.value = false
         return
       }
-      // updateAvatar 已原子完成：上传OSS + 删旧头像 + 更新DB
+      // updateAvatar 已原子完成：上传MinIO + 删旧头像 + 更新DB
       userStore.setUser(avatarResult.data)
       pendingAvatarFile.value = null
     }
@@ -657,7 +657,7 @@ const saveProfile = async () => {
 const loadMyWorks = async () => {
   if (!userStore.user) return
   try {
-    const result = await getWorks(1, 100)
+    const result = await getWorks(1, 500)
     if (result.code === 200) {
       myWorks.value = result.data.filter(w => w.userId === userStore.user.id)
       worksCount.value = myWorks.value.length
@@ -778,6 +778,10 @@ const handleFollow = async (userId) => {
   } catch (err) {
     console.error('取消关注失败', err)
   }
+}
+
+const goToProfile = (userId) => {
+  router.push(`/profile/${userId}`)
 }
 
 const formatCount = (count) => {
@@ -1261,6 +1265,7 @@ onMounted(() => {
   background: #2a2a2a;
   border-radius: 8px;
   position: relative;
+  cursor: pointer;
 }
 
 .user-item.batch-selected {

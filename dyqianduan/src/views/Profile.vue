@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="my-container" ref="containerRef" @scroll="handleScroll">
     <div
       class="profile-header-section"
@@ -274,7 +274,7 @@ const handleBackgroundUpload = (event) => {
   const file = event.target.files?.[0]
   if (!file) return
 
-  // 仅本地预览，不上传到 OSS！上传在 confirmBackground 点"确认更换"时才执行
+  // 仅本地预览，不上传到 MinIO！上传在 confirmBackground 点"确认更换"时才执行
   pendingBackgroundFile.value = file
   const reader = new FileReader()
   reader.onload = (ev) => {
@@ -344,7 +344,7 @@ const confirmAvatar = async () => {
     const result = await updateAvatar(pendingAvatarFile.value)
     if (result.code === 200) {
       userStore.setUser(result.data)
-      // 清除本地预览，使用 OSS 返回的 URL
+      // 清除本地预览，使用 MinIO 返回的 URL
       previewAvatar.value = ''
     }
   } catch (err) {
@@ -425,7 +425,7 @@ const loadUserProfile = async () => {
 const loadWorks = async () => {
   if (!targetUser.value) return
   try {
-    const result = await getWorks(1, 100)
+    const result = await getWorks(1, 500)
     if (result.code === 200) {
       targetWorks.value = result.data.filter(w => w.userId === targetUser.value.id)
       worksCount.value = targetWorks.value.reduce((sum, w) => sum + (w.likesCount || 0), 0)

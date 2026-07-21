@@ -254,6 +254,18 @@ const openAiChat = async () => {
   showChat.value = true
   chatInput.value = ''
 
+  // 加载好友列表（如果尚未加载）
+  if (friends.value.length === 0 && userStore.user?.id) {
+    try {
+      const result = await getFriends(userStore.user.id)
+      if (result.code === 200) {
+        friends.value = result.data
+      }
+    } catch (err) {
+      console.error('获取好友列表失败', err)
+    }
+  }
+
   if (!wasAiChat) {
     chatMessages.value = []
     // 从数据库加载AI聊天历史

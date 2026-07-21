@@ -2,10 +2,10 @@ package com.example.dyhouduan.controller;
 
 import com.example.dyhouduan.dto.Response;
 import com.example.dyhouduan.utils.FileStorageUtil;
-import com.example.dyhouduan.utils.OssUtil;
+import com.example.dyhouduan.utils.MinioUtil;
+import com.example.dyhouduan.config.MinioProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,24 +15,24 @@ import org.springframework.web.multipart.MultipartFile;
 public class UploadController {
 
     @Autowired
-    private OssUtil ossUtil;
+    private MinioUtil minioUtil;
 
     @Autowired
     private FileStorageUtil fileStorageUtil;
 
-    @Value("${aliyun.oss.endpoint:}")
-    private String ossEndpoint;
+    @Autowired
+    private MinioProperties minioProperties;
 
-    private boolean useOss() {
-        return ossEndpoint != null && !ossEndpoint.isEmpty();
+    private boolean useMinio() {
+        return minioProperties.getEndpoint() != null && !minioProperties.getEndpoint().isEmpty();
     }
 
     @PostMapping("/image")
     public Response<String> uploadImage(@RequestParam("file") MultipartFile file) {
         try {
             String url;
-            if (useOss()) {
-                url = ossUtil.uploadFile(file, "images");
+            if (useMinio()) {
+                url = minioUtil.uploadFile(file, "images");
             } else {
                 url = fileStorageUtil.uploadFile(file, "images");
             }
@@ -47,8 +47,8 @@ public class UploadController {
     public Response<String> uploadVideo(@RequestParam("file") MultipartFile file) {
         try {
             String url;
-            if (useOss()) {
-                url = ossUtil.uploadFile(file, "videos");
+            if (useMinio()) {
+                url = minioUtil.uploadFile(file, "videos");
             } else {
                 url = fileStorageUtil.uploadFile(file, "videos");
             }
@@ -63,8 +63,8 @@ public class UploadController {
     public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
         try {
             String url;
-            if (useOss()) {
-                url = ossUtil.uploadFile(file, "avatars");
+            if (useMinio()) {
+                url = minioUtil.uploadFile(file, "avatars");
             } else {
                 url = fileStorageUtil.uploadFile(file, "avatars");
             }
@@ -79,8 +79,8 @@ public class UploadController {
     public Response<String> uploadBackground(@RequestParam("file") MultipartFile file) {
         try {
             String url;
-            if (useOss()) {
-                url = ossUtil.uploadFile(file, "backgrounds");
+            if (useMinio()) {
+                url = minioUtil.uploadFile(file, "backgrounds");
             } else {
                 url = fileStorageUtil.uploadFile(file, "backgrounds");
             }
@@ -106,8 +106,8 @@ public class UploadController {
             }
 
             String url;
-            if (useOss()) {
-                url = ossUtil.uploadFile(file, path);
+            if (useMinio()) {
+                url = minioUtil.uploadFile(file, path);
             } else {
                 url = fileStorageUtil.uploadFile(file, path);
             }
@@ -127,8 +127,8 @@ public class UploadController {
 
             for (String url : urls) {
                 if (url != null && !url.isEmpty()) {
-                    if (useOss()) {
-                        ossUtil.deleteFile(url);
+                    if (useMinio()) {
+                        minioUtil.deleteFile(url);
                     } else {
                         fileStorageUtil.deleteFile(url);
                     }

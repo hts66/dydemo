@@ -7,9 +7,9 @@ import com.example.dyhouduan.entity.Work;
 import com.example.dyhouduan.mapper.LikeMapper;
 import com.example.dyhouduan.mapper.WorkMapper;
 import com.example.dyhouduan.service.WorkService;
-import com.example.dyhouduan.config.OssProperties;
+import com.example.dyhouduan.config.MinioProperties;
 import com.example.dyhouduan.utils.FileStorageUtil;
-import com.example.dyhouduan.utils.OssUtil;
+import com.example.dyhouduan.utils.MinioUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,16 +23,16 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     private LikeMapper likeMapper;
 
     @Autowired
-    private OssUtil ossUtil;
+    private MinioUtil minioUtil;
 
     @Autowired
     private FileStorageUtil fileStorageUtil;
 
     @Autowired
-    private OssProperties ossProperties;
+    private MinioProperties minioProperties;
 
-    private boolean useOss() {
-        return ossProperties.getEndpoint() != null && !ossProperties.getEndpoint().isEmpty();
+    private boolean useMinio() {
+        return minioProperties.getEndpoint() != null && !minioProperties.getEndpoint().isEmpty();
     }
 
     @Override
@@ -114,9 +114,9 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
             return false;
         }
 
-        if (useOss()) {
-            ossUtil.deleteFile(work.getUrl());
-            ossUtil.deleteFile(work.getThumbnail());
+        if (useMinio()) {
+            minioUtil.deleteFile(work.getUrl());
+            minioUtil.deleteFile(work.getThumbnail());
         } else {
             fileStorageUtil.deleteFile(work.getUrl());
             fileStorageUtil.deleteFile(work.getThumbnail());

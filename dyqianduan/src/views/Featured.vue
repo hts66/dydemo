@@ -240,7 +240,7 @@ const filteredWorks = computed(() => works.value)
 
 const loadWorks = async () => {
   try {
-    const result = await getWorks(1, 50)
+    const result = await getWorks(1, 500)
     if (result.code === 200) {
       for (const work of result.data) {
         work.isLiked = false

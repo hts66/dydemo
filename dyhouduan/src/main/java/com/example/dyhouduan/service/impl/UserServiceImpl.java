@@ -9,9 +9,9 @@ import com.example.dyhouduan.mapper.UserMapper;
 import com.example.dyhouduan.service.UserService;
 import com.example.dyhouduan.utils.FileStorageUtil;
 import com.example.dyhouduan.utils.JwtUtil;
-import com.example.dyhouduan.utils.OssUtil;
+import com.example.dyhouduan.utils.MinioUtil;
+import com.example.dyhouduan.config.MinioProperties;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,7 +23,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private JwtUtil jwtUtil;
 
     @Autowired
-    private OssUtil ossUtil;
+    private MinioUtil minioUtil;
 
     @Autowired
     private FileStorageUtil fileStorageUtil;
@@ -31,11 +31,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @Value("${aliyun.oss.endpoint:}")
-    private String ossEndpoint;
+    @Autowired
+    private MinioProperties minioProperties;
 
-    private boolean useOss() {
-        return ossEndpoint != null && !ossEndpoint.isEmpty();
+    private boolean useMinio() {
+        return minioProperties.getEndpoint() != null && !minioProperties.getEndpoint().isEmpty();
     }
 
     @Override
@@ -110,8 +110,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             String oldAvatar = user.getAvatar();
             user.setAvatar(profile.getAvatar());
             if (oldAvatar != null && !oldAvatar.isEmpty()) {
-                if (useOss()) {
-                    ossUtil.deleteFile(oldAvatar);
+                if (useMinio()) {
+                    minioUtil.deleteFile(oldAvatar);
                 } else {
                     fileStorageUtil.deleteFile(oldAvatar);
                 }
@@ -141,8 +141,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 删除旧的背景文件
         String oldBg = user.getBackground();
         if (oldBg != null && !oldBg.isEmpty()) {
-            if (useOss()) {
-                ossUtil.deleteFile(oldBg);
+            if (useMinio()) {
+                minioUtil.deleteFile(oldBg);
             } else {
                 fileStorageUtil.deleteFile(oldBg);
             }
@@ -159,10 +159,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("用户不存在");
         }
 
-        // 上传新头像到 OSS（或本地）
+        // 上传新头像到 MinIO（或本地）
         String newAvatarUrl;
-        if (useOss()) {
-            newAvatarUrl = ossUtil.uploadFile(file, "avatars");
+        if (useMinio()) {
+            newAvatarUrl = minioUtil.uploadFile(file, "avatars");
         } else {
             newAvatarUrl = fileStorageUtil.uploadFile(file, "avatars");
         }
@@ -170,8 +170,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 删除旧头像
         String oldAvatar = user.getAvatar();
         if (oldAvatar != null && !oldAvatar.isEmpty()) {
-            if (useOss()) {
-                ossUtil.deleteFile(oldAvatar);
+            if (useMinio()) {
+                minioUtil.deleteFile(oldAvatar);
             } else {
                 fileStorageUtil.deleteFile(oldAvatar);
             }
@@ -190,10 +190,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new RuntimeException("用户不存在");
         }
 
-        // 上传新背景图到 OSS（或本地）
+        // 上传新背景图到 MinIO（或本地）
         String newBgUrl;
-        if (useOss()) {
-            newBgUrl = ossUtil.uploadFile(file, "backgrounds");
+        if (useMinio()) {
+            newBgUrl = minioUtil.uploadFile(file, "backgrounds");
         } else {
             newBgUrl = fileStorageUtil.uploadFile(file, "backgrounds");
         }
@@ -201,8 +201,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 删除旧背景图
         String oldBg = user.getBackground();
         if (oldBg != null && !oldBg.isEmpty()) {
-            if (useOss()) {
-                ossUtil.deleteFile(oldBg);
+            if (useMinio()) {
+                minioUtil.deleteFile(oldBg);
             } else {
                 fileStorageUtil.deleteFile(oldBg);
             }

@@ -9,7 +9,7 @@
  *   2. 自动滚动加载视频列表
  *   3. 从页面提取视频信息（URL、标题、封面等）
  *   4. 下载视频到本地
- *   5. 通过项目后端API上传到阿里云OSS
+ *   5. 通过项目后端API上传到MinIO
  *   6. 以 2703605029@qq.com 身份发布
  */
 
@@ -25,7 +25,7 @@ import https from 'https'
 const CONFIG = {
   // 抖音用户主页
   douyinUrl:
-    'https://www.douyin.com/user/MS4wLjABAAAAdTYgCktYo3DurGy11ykj6RjFkxYzUZy2wWffzm6ksY4?from_tab_name=main&vid=7663472934409281203',
+    'https://www.douyin.com/user/MS4wLjABAAAA0W6MrnV7YIYmneCLCypeKVoZj4VDk9amQorNZ8aIVfs?from_tab_name=main&vid=7087128148474711327',
 
   // 项目后端
   apiBase: 'http://localhost:8080',
@@ -43,31 +43,43 @@ const CONFIG = {
 
 // ========== 工具函数 ==========
 
-// 下载文件 — 通过 Playwright 浏览器上下文下载（带 Cookie/Referer 防 403）
+// 下载文件
 async function downloadFile(url, filepath) {
-  const downloadPage = await context.newPage()
-  try {
-    // 用 Route 拦截，在浏览器网络层获取响应 body
-    let body = null
-    await downloadPage.route(
-      (req) => req.url() === url,
-      async (route) => {
-        const resp = await route.fetch()
-        body = await resp.body()
-        await route.abort()
-      }
-    )
-    // 导航到视频 URL 触发请求
-    await downloadPage.goto(url, { waitUntil: 'commit', timeout: 30000 }).catch(() => {})
-    await downloadPage.waitForTimeout(3000)
+  return new Promise((resolve, reject) => {
+    const file = createWriteStream(filepath)
+    const protocol = url.startsWith('https') ? https : http
 
-    if (!body || body.length === 0) {
-      throw new Error('未捕获到视频数据')
-    }
-    fs.writeFileSync(filepath, body)
-  } finally {
-    await downloadPage.close()
-  }
+    protocol
+      .get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
+        // 处理重定向
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          file.close()
+          fs.unlinkSync(filepath)
+          return downloadFile(response.headers.location, filepath).then(resolve).catch(reject)
+        }
+
+        if (response.statusCode !== 200) {
+          file.close()
+          fs.unlinkSync(filepath)
+          return reject(new Error(`HTTP ${response.statusCode}`))
+        }
+
+        response.pipe(file)
+        file.on('finish', () => {
+          file.close()
+          resolve()
+        })
+        file.on('error', (err) => {
+          fs.unlinkSync(filepath)
+          reject(err)
+        })
+      })
+      .on('error', (err) => {
+        file.close()
+        if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
+        reject(err)
+      })
+  })
 }
 
 // 上传文件到后端 → 返回文件URL
@@ -105,7 +117,7 @@ async function uploadToBackend(filepath, type = 'video') {
           try {
             const json = JSON.parse(data)
             if (json.code === 200) {
-              resolve(json.data) // 返回 OSS URL
+              resolve(json.data) // 返回 MinIO URL
             } else {
               reject(new Error(json.message || 'Upload failed'))
             }
@@ -205,7 +217,7 @@ async function publishWork(token, videoUrl, thumbnailUrl, title, description) {
 
 async function main() {
   console.log('═══════════════════════════════════════')
-  console.log('  抖音视频抓取 + OSS上传工具')
+  console.log('  抖音视频抓取 + MinIO上传工具')
   console.log('═══════════════════════════════════════\n')
 
   // 创建下载目录
@@ -224,16 +236,11 @@ async function main() {
     ],
   })
 
-  // 持久化登录状态：上次登录的 Cookie 存在这个文件里
-  const storageFile = path.join(CONFIG.downloadDir, 'douyin_session.json')
-
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
     locale: 'zh-CN',
-    // 如果上次登录过，直接恢复 Cookie，不需要重新扫码
-    storageState: fs.existsSync(storageFile) ? storageFile : undefined,
   })
 
   // 注入反检测脚本
@@ -246,50 +253,8 @@ async function main() {
 
   const page = await context.newPage()
 
-  // ── 步骤2: 登录抖音 ──
-  const alreadyLoggedIn = fs.existsSync(storageFile)
-  if (alreadyLoggedIn) {
-    console.log('[2/7] 已恢复上次的登录状态，跳过扫码 ✓\n')
-  } else {
-    console.log('[2/7] 首次使用需要登录抖音...')
-    console.log('  正在打开抖音首页，请在浏览器中扫码登录...\n')
-
-    await page.goto('https://www.douyin.com/', { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {})
-    await page.waitForTimeout(2000)
-
-    // 尝试点击"登录"按钮
-    const loginBtn = await page.$('text=登录') || await page.$('[data-e2e="login"]')
-    if (loginBtn) {
-      await loginBtn.click()
-      console.log('  已点击登录按钮，请在浏览器窗口中扫码登录')
-    } else {
-      console.log('  如果未弹出登录框，请在页面右上角点击"登录"并扫码')
-    }
-
-    // 等待登录完成
-    console.log('  等待登录中...')
-    const loggedIn = await Promise.race([
-      page.waitForFunction(() => {
-        const cookies = document.cookie
-        return cookies.includes('passport') || cookies.includes('sessionid') ||
-               !!document.querySelector('[data-e2e="user-avatar"]') ||
-               !!document.querySelector('.avatar') ||
-               !!document.querySelector('img[src*="avatar"]')
-      }, { timeout: 120000 }).then(() => true).catch(() => false),
-      new Promise(r => setTimeout(() => r(false), 120000))
-    ])
-
-    if (loggedIn) {
-      // 保存登录状态，下次不用再扫码
-      await context.storageState({ path: storageFile })
-      console.log('  ✓ 登录成功！登录状态已保存，下次无需重新登录\n')
-    } else {
-      console.log('  ⚠ 2分钟内未检测到登录，继续尝试...（可能只能抓取少量视频）\n')
-    }
-  }
-
-  // ── 步骤3: 打开抖音用户主页 ──
-  console.log('[3/6] 打开抖音用户主页...')
+  // ── 步骤2: 打开抖音用户主页 ──
+  console.log('[2/6] 打开抖音用户主页...')
   console.log(`  URL: ${CONFIG.douyinUrl}\n`)
 
   await page.goto(CONFIG.douyinUrl, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {
@@ -299,8 +264,8 @@ async function main() {
   // 等待页面渲染
   await page.waitForTimeout(3000)
 
-  // ── 步骤4: 滚动加载视频列表 ──
-  console.log('[4/7] 滚动加载视频列表...')
+  // ── 步骤3: 滚动加载视频列表 ──
+  console.log('[3/6] 滚动加载视频列表...')
 
   const videoSet = new Set()
   let scrollCount = 0
@@ -369,8 +334,8 @@ async function main() {
 
   console.log(`\n  共发现 ${videoSet.size} 个视频条目\n`)
 
-  // ── 步骤5: 截取网络请求中的视频数据 ──
-  console.log('[5/7] 监听网络请求获取视频真实URL...')
+  // ── 步骤4: 截取网络请求中的视频数据 ──
+  console.log('[4/6] 监听网络请求获取视频真实URL...')
 
   const videoData = [] // { videoId, title, cover, videoUrl }
 
@@ -486,8 +451,8 @@ async function main() {
     console.log('  页面提取数据已保存到 douyin_downloads/page_extracted.json')
   }
 
-  // ── 步骤6: 下载视频 ──
-  console.log(`\n[6/7] 下载视频 (最多 ${CONFIG.maxVideos} 个)...`)
+  // ── 步骤5: 下载视频 ──
+  console.log(`\n[5/6] 下载视频 (最多 ${CONFIG.maxVideos} 个)...`)
 
   const results = []
   const toDownload = videoData.slice(0, CONFIG.maxVideos)
@@ -499,25 +464,12 @@ async function main() {
 
     console.log(`  [${i + 1}/${toDownload.length}] ${v.title || v.videoId}`)
 
-    // 下载视频（最多重试2次）
+    // 下载视频
     try {
       if (v.videoUrl && !fs.existsSync(videoFile)) {
-        let downloaded = false
-        for (let attempt = 0; attempt < 2 && !downloaded; attempt++) {
-          if (attempt > 0) {
-            console.log('    第2次尝试...')
-            await new Promise(r => setTimeout(r, 2000))
-          }
-          process.stdout.write(attempt === 0 ? '    下载视频... ' : '')
-          try {
-            await downloadFile(v.videoUrl, videoFile)
-            console.log(`✓ (${(fs.statSync(videoFile).size / 1024 / 1024).toFixed(1)}MB)`)
-            downloaded = true
-          } catch (e) {
-            if (attempt === 1) throw e
-            console.log(`✗ ${e.message}`)
-          }
-        }
+        process.stdout.write('    下载视频... ')
+        await downloadFile(v.videoUrl, videoFile)
+        console.log(`✓ (${(fs.statSync(videoFile).size / 1024 / 1024).toFixed(1)}MB)`)
       } else if (fs.existsSync(videoFile)) {
         console.log(`    视频已缓存 (${(fs.statSync(videoFile).size / 1024 / 1024).toFixed(1)}MB)`)
       }
@@ -539,15 +491,10 @@ async function main() {
     }
 
     results.push({ ...v, videoFile, coverFile, status: 'downloaded' })
-
-    // 每个视频下载后间隔1.5秒，避免触发限速
-    if (i < toDownload.length - 1) {
-      await new Promise(r => setTimeout(r, 1500))
-    }
   }
 
-  // ── 步骤7: 上传到OSS并发布 ──
-  console.log(`\n[7/7] 上传到 OSS 并发布作品...`)
+  // ── 步骤6: 上传到MinIO并发布 ──
+  console.log(`\n[6/6] 上传到 MinIO 并发布作品...`)
 
   // 首先获取JWT token
   console.log('  获取登录令牌...')

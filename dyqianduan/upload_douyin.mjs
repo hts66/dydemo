@@ -1,5 +1,5 @@
 /**
- * 批量上传已下载的抖音视频到 OSS 并发布
+ * 批量上传已下载的抖音视频到 MinIO 并发布
  * 用法: node upload_douyin.mjs
  */
 import fs from 'fs'
@@ -29,16 +29,21 @@ for (let i = 0; i < rawData.length; i++) {
 
   if (fs.existsSync(videoFile)) {
     try {
-      const cmd = `curl -s -X POST ${API}/api/upload/video -F "file=@${videoFile}"`
-      const res = JSON.parse(execSync(cmd, { encoding: 'utf-8', windowsHide: true }))
+      // Windows 上优先使用 curl.exe，避免 PowerShell 的 curl 别名 (Invoke-WebRequest)
+      const curlCmd = process.platform === 'win32' ? 'curl.exe' : 'curl'
+      const absPath = path.resolve(videoFile)
+      const cmd = `${curlCmd} -s -X POST ${API}/api/upload/video -F "file=@${absPath}"`
+      const raw = execSync(cmd, { encoding: 'utf-8', windowsHide: true })
+      const res = JSON.parse(raw)
       if (res.code === 200) {
         videoUrl = res.data
         console.log(`  视频: ✓ ${videoUrl.substring(0, 60)}...`)
       } else {
-        console.log(`  视频: ✗ ${res.message}`)
+        console.log(`  视频: ✗ ${res.message || JSON.stringify(res)}`)
       }
     } catch (e) {
       console.log(`  视频: ✗ ${e.message}`)
+      if (e.stderr) console.log(`  详情: ${e.stderr}`)
     }
   }
 
@@ -48,7 +53,9 @@ for (let i = 0; i < rawData.length; i++) {
 
   if (fs.existsSync(coverFile)) {
     try {
-      const cmd = `curl -s -X POST ${API}/api/upload/image -F "file=@${coverFile}"`
+      const curlCmd = process.platform === 'win32' ? 'curl.exe' : 'curl'
+      const absPath = path.resolve(coverFile)
+      const cmd = `${curlCmd} -s -X POST ${API}/api/upload/image -F "file=@${absPath}"`
       const res = JSON.parse(execSync(cmd, { encoding: 'utf-8', windowsHide: true }))
       if (res.code === 200) {
         coverUrl = res.data
