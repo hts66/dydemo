@@ -20,6 +20,9 @@ public interface LikeMapper extends BaseMapper<Like> {
             "LEFT JOIN users u ON w.user_id = u.id " +
             "INNER JOIN likes l ON w.id = l.work_id " +
             "WHERE l.user_id = #{userId} " +
-            "ORDER BY l.created_at DESC")
-    List<Work> selectLikedWorks(@Param("userId") Long userId);
+            "ORDER BY l.created_at DESC " +
+            "LIMIT #{offset}, #{limit}")
+    List<Work> selectLikedWorks(@Param("userId") Long userId,
+                                @Param("offset") int offset,
+                                @Param("limit") int limit);
 }

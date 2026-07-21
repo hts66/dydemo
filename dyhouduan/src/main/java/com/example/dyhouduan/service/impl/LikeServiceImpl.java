@@ -49,7 +49,8 @@ public class LikeServiceImpl extends ServiceImpl<LikeMapper, Like> implements Li
     }
 
     @Override
-    public List<Work> getLikedWorks(Long userId) {
-        return baseMapper.selectLikedWorks(userId);
+    public List<Work> getLikedWorks(Long userId, int page, int size) {
+        int offset = (page - 1) * size;
+        return baseMapper.selectLikedWorks(userId, offset, size);
     }
 }

@@ -12,5 +12,5 @@ public interface LikeService extends IService<Like> {
 
     boolean isLiked(Long userId, Long workId);
 
-    List<Work> getLikedWorks(Long userId);
+    List<Work> getLikedWorks(Long userId, int page, int size);
 }

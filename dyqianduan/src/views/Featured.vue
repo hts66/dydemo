@@ -1,5 +1,5 @@
 <template>
-  <div class="featured-container">
+  <div class="featured-container" @scroll="handleScroll">
     <!-- 视频网格 -->
     <div class="video-grid">
       <div 
@@ -55,6 +55,9 @@
             </div>
           </div>
         </div>
+      </div>
+      <div v-if="loading" class="loading-state">
+        <p>加载中...</p>
       </div>
     </div>
 
@@ -204,6 +207,11 @@ const commentInput = ref('')
 const videoPlayer = ref(null)
 const commentsSection = ref(null)
 
+// 分页懒加载
+const page = ref(1)
+const hasMore = ref(true)
+const loading = ref(false)
+
 // 分享相关
 const showSharePopup = ref(false)
 const shareSuccess = ref(false)
@@ -238,30 +246,52 @@ const shareToFriend = async (friend) => {
 
 const filteredWorks = computed(() => works.value)
 
-const loadWorks = async () => {
+const loadWorks = async (reset = false) => {
+  if (loading.value) return
+  if (reset) {
+    page.value = 1
+    hasMore.value = true
+    works.value = []
+  }
+  if (!hasMore.value) return
+  loading.value = true
   try {
-    const result = await getWorks(1, 500)
+    const result = await getWorks(page.value, 12)
     if (result.code === 200) {
-      for (const work of result.data) {
-        work.isLiked = false
-        work.isFollowing = false
-        if (userStore.isLoggedIn) {
-          try {
-            const likeResult = await checkIsLiked(work.id)
-            if (likeResult.code === 200) work.isLiked = likeResult.data
-          } catch (e) {}
-          if (work.userId) {
+      if (result.data.length === 0) {
+        hasMore.value = false
+      } else {
+        for (const work of result.data) {
+          work.isLiked = false
+          work.isFollowing = false
+          if (userStore.isLoggedIn) {
             try {
-              const followResult = await checkIsFollowing(work.userId)
-              if (followResult.code === 200) work.isFollowing = followResult.data
+              const likeResult = await checkIsLiked(work.id)
+              if (likeResult.code === 200) work.isLiked = likeResult.data
             } catch (e) {}
+            if (work.userId) {
+              try {
+                const followResult = await checkIsFollowing(work.userId)
+                if (followResult.code === 200) work.isFollowing = followResult.data
+              } catch (e) {}
+            }
           }
         }
+        works.value.push(...result.data)
+        page.value++
       }
-      works.value = result.data
     }
   } catch (err) {
     console.error('加载视频失败', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleScroll = (event) => {
+  const { scrollTop, scrollHeight, clientHeight } = event.target
+  if (scrollTop + clientHeight >= scrollHeight - 150) {
+    loadWorks()
   }
 }
 
@@ -449,6 +479,14 @@ const formatTime = (dateStr) => {
   height: 100%;
   overflow-y: auto;
   background: #1a1a1a;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 20px 0;
+  color: #888;
+  font-size: 13px;
+  grid-column: 1 / -1;
 }
 
 /* 视频网格 */

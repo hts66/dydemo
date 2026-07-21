@@ -8,6 +8,6 @@ export const isLiked = (workId) => {
   return request.get(`/likes/${workId}`)
 }
 
-export const getLikedWorks = (userId) => {
-  return request.get(`/likes/list/${userId}`)
+export const getLikedWorks = (userId, page = 1, size = 12) => {
+  return request.get(`/likes/list/${userId}?page=${page}&size=${size}`)
 }

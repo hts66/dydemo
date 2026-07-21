@@ -55,9 +55,11 @@ public class LikeController {
     }
 
     @GetMapping("/list/{userId}")
-    public Response<List<Work>> getLikedWorks(@PathVariable Long userId) {
+    public Response<List<Work>> getLikedWorks(@PathVariable Long userId,
+                                               @RequestParam(defaultValue = "1") int page,
+                                               @RequestParam(defaultValue = "12") int size) {
         try {
-            List<Work> works = likeService.getLikedWorks(userId);
+            List<Work> works = likeService.getLikedWorks(userId, page, size);
             return Response.success(works);
         } catch (Exception e) {
             log.error("获取点赞列表失败", e);

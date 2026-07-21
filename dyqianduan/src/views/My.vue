@@ -143,8 +143,11 @@
             <span class="upload-text">发布作品</span>
           </div>
         </div>
-        <div v-if="myWorks.length === 0 && !userStore.isLoggedIn" class="empty-state">
+        <div v-if="myWorks.length === 0 && !userStore.isLoggedIn && !worksLoading" class="empty-state">
           <p>还没有发布作品</p>
+        </div>
+        <div v-if="worksLoading" class="loading-state">
+          <p>加载中...</p>
         </div>
       </div>
 
@@ -181,8 +184,11 @@
             </div>
           </div>
         </div>
-        <div v-if="likedWorks.length === 0" class="empty-state">
+        <div v-if="likedWorks.length === 0 && !likedLoading" class="empty-state">
           <p>还没有喜欢的作品</p>
+        </div>
+        <div v-if="likedLoading" class="loading-state">
+          <p>加载中...</p>
         </div>
       </div>
 
@@ -448,6 +454,15 @@ const worksCount = ref(0)
 const currentVideo = ref(null)
 const videoPlayer = ref(null)
 
+// 分页懒加载 — 作品
+const worksPage = ref(1)
+const worksHasMore = ref(true)
+const worksLoading = ref(false)
+// 分页懒加载 — 喜欢
+const likedPage = ref(1)
+const likedHasMore = ref(true)
+const likedLoading = ref(false)
+
 const isBatchMode = ref(false)
 const selectedItems = ref([])
 
@@ -549,11 +564,17 @@ const headerStyle = computed(() => {
 })
 
 const handleScroll = (event) => {
-  const scrollTop = event.target.scrollTop
+  const { scrollTop, scrollHeight, clientHeight } = event.target
+  // 头部缩放
   const minHeight = 120
   const maxHeight = 300
   const newHeight = Math.max(minHeight, maxHeight - scrollTop * 0.5)
   headerHeight.value = newHeight
+  // 触底加载更多
+  if (scrollTop + clientHeight >= scrollHeight - 150) {
+    if (activeTab.value === 'works') loadMyWorks()
+    else if (activeTab.value === 'liked') loadLikedWorks()
+  }
 }
 
 const openEditModal = () => {
@@ -654,16 +675,32 @@ const saveProfile = async () => {
   }
 }
 
-const loadMyWorks = async () => {
+const loadMyWorks = async (reset = false) => {
   if (!userStore.user) return
+  if (worksLoading.value) return
+  if (reset) {
+    worksPage.value = 1
+    worksHasMore.value = true
+    myWorks.value = []
+  }
+  if (!worksHasMore.value) return
+  worksLoading.value = true
   try {
-    const result = await getWorks(1, 500)
+    const result = await getWorks(worksPage.value, 12)
     if (result.code === 200) {
-      myWorks.value = result.data.filter(w => w.userId === userStore.user.id)
+      const filtered = result.data.filter(w => w.userId === userStore.user.id)
+      if (result.data.length === 0) {
+        worksHasMore.value = false
+      } else {
+        myWorks.value.push(...filtered)
+        worksPage.value++
+      }
       worksCount.value = myWorks.value.length
     }
   } catch (err) {
     console.error('加载作品失败', err)
+  } finally {
+    worksLoading.value = false
   }
 }
 
@@ -682,15 +719,30 @@ const loadFollowData = async () => {
   }
 }
 
-const loadLikedWorks = async () => {
+const loadLikedWorks = async (reset = false) => {
   if (!userStore.user) return
+  if (likedLoading.value) return
+  if (reset) {
+    likedPage.value = 1
+    likedHasMore.value = true
+    likedWorks.value = []
+  }
+  if (!likedHasMore.value) return
+  likedLoading.value = true
   try {
-    const result = await getLikedWorks(userStore.user.id)
+    const result = await getLikedWorks(userStore.user.id, likedPage.value, 12)
     if (result.code === 200) {
-      likedWorks.value = result.data
+      if (result.data.length === 0) {
+        likedHasMore.value = false
+      } else {
+        likedWorks.value.push(...result.data)
+        likedPage.value++
+      }
     }
   } catch (err) {
     console.error('加载点赞视频失败', err)
+  } finally {
+    likedLoading.value = false
   }
 }
 
@@ -793,6 +845,8 @@ const formatCount = (count) => {
 const handleTabClick = (tab) => {
   activeTab.value = tab
   exitBatchMode()
+  if (tab === 'works') loadMyWorks(true)
+  else if (tab === 'liked') loadLikedWorks(true)
 }
 
 const enterBatchMode = () => {
@@ -1318,6 +1372,14 @@ onMounted(() => {
   text-align: center;
   padding: 60px 0;
   color: #888;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 20px 0;
+  color: #888;
+  font-size: 13px;
+  grid-column: 1 / -1;
 }
 
 .video-modal {

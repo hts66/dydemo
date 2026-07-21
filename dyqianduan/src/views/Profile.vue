@@ -117,8 +117,11 @@
             </div>
           </div>
         </div>
-        <div v-if="targetWorks.length === 0" class="empty-state">
+        <div v-if="targetWorks.length === 0 && !worksLoading" class="empty-state">
           <p>还没有发布作品</p>
+        </div>
+        <div v-if="worksLoading" class="loading-state">
+          <p>加载中...</p>
         </div>
       </div>
 
@@ -237,6 +240,11 @@ const isFollowingTarget = ref(false)
 const currentVideo = ref(null)
 const videoPlayer = ref(null)
 const headerHeight = ref(300)
+
+// 分页懒加载
+const worksPage = ref(1)
+const worksHasMore = ref(true)
+const worksLoading = ref(false)
 
 const isOwnProfile = computed(() => {
   return userStore.user && targetUser.value && userStore.user.id === targetUser.value.id
@@ -377,11 +385,16 @@ const headerStyle = computed(() => {
 })
 
 const handleScroll = (event) => {
-  const scrollTop = event.target.scrollTop
+  const { scrollTop, scrollHeight, clientHeight } = event.target
+  // 头部缩放
   const minHeight = 120
   const maxHeight = 300
   const newHeight = Math.max(minHeight, maxHeight - scrollTop * 0.5)
   headerHeight.value = newHeight
+  // 触底加载更多作品
+  if (activeTab.value === 'works' && scrollTop + clientHeight >= scrollHeight - 150) {
+    loadWorks()
+  }
 }
 
 const loadUserProfile = async () => {
@@ -422,16 +435,32 @@ const loadUserProfile = async () => {
   }
 }
 
-const loadWorks = async () => {
+const loadWorks = async (reset = false) => {
   if (!targetUser.value) return
+  if (worksLoading.value) return
+  if (reset) {
+    worksPage.value = 1
+    worksHasMore.value = true
+    targetWorks.value = []
+  }
+  if (!worksHasMore.value) return
+  worksLoading.value = true
   try {
-    const result = await getWorks(1, 500)
+    const result = await getWorks(worksPage.value, 12)
     if (result.code === 200) {
-      targetWorks.value = result.data.filter(w => w.userId === targetUser.value.id)
+      const filtered = result.data.filter(w => w.userId === targetUser.value.id)
+      if (result.data.length === 0) {
+        worksHasMore.value = false
+      } else {
+        targetWorks.value.push(...filtered)
+        worksPage.value++
+      }
       worksCount.value = targetWorks.value.reduce((sum, w) => sum + (w.likesCount || 0), 0)
     }
   } catch (err) {
     console.error('加载作品失败', err)
+  } finally {
+    worksLoading.value = false
   }
 }
 
@@ -494,6 +523,9 @@ const formatCount = (count) => {
 
 const handleTabClick = (tab) => {
   activeTab.value = tab
+  if (tab === 'works') {
+    loadWorks(true)
+  }
 }
 
 onMounted(() => {
@@ -854,6 +886,13 @@ onMounted(() => {
   text-align: center;
   padding: 60px 0;
   color: #888;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 20px 0;
+  color: #888;
+  font-size: 13px;
 }
 
 .video-modal {
