@@ -25,14 +25,14 @@ import https from 'https'
 const CONFIG = {
   // 抖音用户主页
   douyinUrl:
-    'https://www.douyin.com/user/MS4wLjABAAAAfNY2IHUnjb3LbBCBxmHr7qtd5B84koxhue0TlnltPIQ?from_tab_name=main',
+    'https://www.douyin.com/user/MS4wLjABAAAAgL1OSJOZ9V2ycMAXDtdVgCUZtwzgcFhyF1Z0lcVjNYbG02XjvHgR4642g28LOAHY?from_tab_name=main',
 
   // 项目后端
   apiBase: 'http://localhost:8080',
   email: '2703605029@qq.com',
 
   // 抓取数量
-  maxVideos: 577,
+  maxVideos: 291,
 
   // 下载目录
   downloadDir: path.resolve('./douyin_downloads'),
@@ -269,10 +269,12 @@ async function main() {
 
   const videoSet = new Set()
   let scrollCount = 0
+  let step3Stale = 0
   const maxScrolls = Math.ceil(CONFIG.maxVideos / 5)
 
   while (videoSet.size < CONFIG.maxVideos && scrollCount < maxScrolls * 2) {
     scrollCount++
+    const beforeSize = videoSet.size
 
     // 从页面提取视频数据
     const videos = await page.evaluate(() => {
@@ -299,7 +301,6 @@ async function main() {
         scripts.forEach((s) => {
           const text = s.textContent || ''
           if (text.includes('"video"') && text.includes('"playAddr"')) {
-            // 尝试找到JSON数据
             const match = text.match(/play_addr[\s\S]*?url_list.*?\["(.*?)"\]/)
             if (match && match[1]) {
               items.push({ videoUrl: match[1].replace(/\\u002F/g, '/') })
@@ -325,11 +326,22 @@ async function main() {
 
     if (videoSet.size >= CONFIG.maxVideos) break
 
+    // 停滞检测
+    if (videoSet.size === beforeSize) {
+      step3Stale++
+      if (step3Stale >= 8) {
+        console.log(`\n  ⚠ 连续 ${step3Stale} 次无新视频，停止DOM扫描`)
+        break
+      }
+    } else {
+      step3Stale = 0
+    }
+
     // 向下滚动
     await page.evaluate(() => {
       window.scrollBy(0, window.innerHeight * 2)
     })
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(1500)
   }
 
   console.log(`\n  共发现 ${videoSet.size} 个视频条目\n`)
@@ -338,6 +350,7 @@ async function main() {
   console.log('[4/6] 监听网络请求获取视频真实URL...')
 
   const videoData = [] // { videoId, title, cover, videoUrl }
+  const seenVideoIds = new Set() // 用 Set 去重，O(1) 替代 O(n) 的 .find()
 
   // 重新加载页面，拦截 API 请求
   let apiVideoCount = 0
@@ -363,7 +376,8 @@ async function main() {
           const desc = aweme?.desc || ''
           const awemeId = aweme?.aweme_id || ''
 
-          if (videoUrl && !videoData.find((v) => v.videoId === awemeId)) {
+          if (videoUrl && awemeId && !seenVideoIds.has(awemeId)) {
+            seenVideoIds.add(awemeId)
             videoData.push({
               videoId: awemeId,
               title: desc,
@@ -382,12 +396,27 @@ async function main() {
   await page.reload({ waitUntil: 'networkidle', timeout: 30000 }).catch(() => {})
   await page.waitForTimeout(2000)
 
-  // 滚动加载更多
+  // 滚动加载更多 — 带停滞检测
+  let staleCount = 0
+  const MAX_STALE = 5 // 连续5次无新数据就停止
   for (let i = 0; i < maxScrolls; i++) {
+    const beforeCount = apiVideoCount
     await page.evaluate(() => window.scrollBy(0, window.innerHeight * 2))
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(2000) // 缩短等待，2秒足够
     process.stdout.write(`\r  滚动加载: ${i + 1}/${maxScrolls} | API捕获: ${apiVideoCount} 个`)
+
     if (apiVideoCount >= CONFIG.maxVideos) break
+
+    // 停滞检测：如果本次滚动没有新数据
+    if (apiVideoCount === beforeCount) {
+      staleCount++
+      if (staleCount >= MAX_STALE) {
+        console.log(`\n  ⚠ 连续 ${MAX_STALE} 次无新数据，可能被限流或已加载完毕，停止滚动`)
+        break
+      }
+    } else {
+      staleCount = 0 // 有新数据就重置
+    }
   }
 
   console.log(`\n  通过API共捕获 ${videoData.length} 个视频的真实URL\n`)
