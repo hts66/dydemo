@@ -73,8 +73,11 @@
               :poster="currentVideo.thumbnail"
               class="modal-video"
               controls
-              autoplay
               loop
+              preload="auto"
+              playsinline
+              webkit-playsinline
+              x5-playsinline
             ></video>
           </div>
           <div class="interaction-section">

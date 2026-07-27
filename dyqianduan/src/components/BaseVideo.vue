@@ -98,6 +98,7 @@ const loading = ref(false)
 const loaded = ref(false)
 const playing = ref(false)
 const isMuted = ref(false)  // 默认有声音
+const autoplayBlocked = ref(false)  // 浏览器自动播放策略导致被静音
 const currentTime = ref(0)
 const duration = ref(0)
 const isDraggingProgress = ref(false)
@@ -105,6 +106,7 @@ const wasPlayingBeforeDrag = ref(false)
 
 let playToken = 0
 let progressDragRAF = null
+let unmuteClickHandler = null  // 自动播放被阻止时的一次性恢复声音监听
 
 // Derive id and src from item prop
 const videoId = computed(() => props.item?.id)
@@ -142,6 +144,23 @@ const doPlay = (token) => {
     if (e.name === 'NotAllowedError' && !videoRef.value.muted) {
       videoRef.value.muted = true
       isMuted.value = true
+      autoplayBlocked.value = true  // 标记为浏览器强制静音
+      // 设置一次性交互监听：用户点击任意位置（音量按钮除外）自动恢复声音
+      if (unmuteClickHandler) {
+        document.removeEventListener('click', unmuteClickHandler, true)
+      }
+      unmuteClickHandler = (event) => {
+        // 不干涉音量按钮点击，toggleMute 会自行处理
+        if (event.target.closest('.sound-toggle')) return
+        document.removeEventListener('click', unmuteClickHandler, true)
+        unmuteClickHandler = null
+        if (videoRef.value && playing.value) {
+          videoRef.value.muted = false
+          isMuted.value = false
+          autoplayBlocked.value = false
+        }
+      }
+      document.addEventListener('click', unmuteClickHandler, true)
       videoRef.value.play().catch(err => {
         if (token !== playToken) return
         console.error('播放失败:', err)
@@ -167,24 +186,19 @@ const play = async () => {
     videoRef.value.src = videoSrc.value
   }
 
-  const onCanPlayHandler = () => {
-    doPlay(token)
-  }
-
   const onErrorHandler = () => {
     if (token !== playToken) return
     loading.value = false
     console.error('视频加载失败')
   }
 
-  videoRef.value.addEventListener('canplay', onCanPlayHandler, { once: true })
   videoRef.value.addEventListener('error', onErrorHandler, { once: true })
 
-  if (videoRef.value.readyState >= 2) {
-    doPlay(token)
-  } else {
+  if (videoRef.value.readyState < 2) {
     videoRef.value.load()
   }
+  // 同步调用 doPlay，在用户手势上下文中立即尝试播放
+  doPlay(token)
 }
 
 // Pause video
@@ -205,6 +219,8 @@ const stop = () => {
     loading.value = false
     currentTime.value = 0
     duration.value = 0
+    isMuted.value = false  // 重置静音状态，下次播放时重新尝试非静音
+    autoplayBlocked.value = false
   }
 }
 
@@ -219,7 +235,13 @@ const toggle = () => {
 
 // Toggle mute/unmute
 const toggleMute = () => {
-  isMuted.value = !isMuted.value
+  // 如果静音是浏览器自动播放策略导致的，点击音量按钮直接恢复声音
+  if (autoplayBlocked.value && isMuted.value) {
+    autoplayBlocked.value = false
+    isMuted.value = false
+  } else {
+    isMuted.value = !isMuted.value
+  }
   if (videoRef.value) {
     videoRef.value.muted = isMuted.value
   }
@@ -389,6 +411,11 @@ onUnmounted(() => {
   off(EVENT_KEY.ITEM_PLAY, handlePlay)
   off(EVENT_KEY.ITEM_STOP, handleStop)
   off(EVENT_KEY.ITEM_TOGGLE, handleToggle)
+
+  if (unmuteClickHandler) {
+    document.removeEventListener('click', unmuteClickHandler, true)
+    unmuteClickHandler = null
+  }
 
   if (progressDragRAF) {
     cancelAnimationFrame(progressDragRAF)
