@@ -25,14 +25,14 @@ import https from 'https'
 const CONFIG = {
   // 抖音用户主页
   douyinUrl:
-    'https://www.douyin.com/user/MS4wLjABAAAAgL1OSJOZ9V2ycMAXDtdVgCUZtwzgcFhyF1Z0lcVjNYbG02XjvHgR4642g28LOAHY?from_tab_name=main',
+    'https://www.douyin.com/user/MS4wLjABAAAAn_QbTPbHT0bUdmlVezIXnhMLK3rW6VI8uEavLNboc20?from_tab_name=main',
 
   // 项目后端
   apiBase: 'http://localhost:8080',
   email: '2703605029@qq.com',
 
   // 抓取数量
-  maxVideos: 291,
+  maxVideos: 551,
 
   // 下载目录
   downloadDir: path.resolve('./douyin_downloads'),
@@ -43,19 +43,40 @@ const CONFIG = {
 
 // ========== 工具函数 ==========
 
-// 下载文件
-async function downloadFile(url, filepath) {
+// 下载文件 — 使用浏览器 cookie 避免 403
+async function downloadFile(browserContext, url, filepath) {
+  // 方式1: 使用 Playwright 浏览器上下文请求（带 cookie / Referer）
+  try {
+    const response = await browserContext.request.get(url, {
+      headers: {
+        Referer: 'https://www.douyin.com/',
+      },
+      timeout: 60000,
+    })
+    if (response.ok()) {
+      const buffer = await response.body()
+      fs.writeFileSync(filepath, buffer)
+      return
+    }
+    console.log(`    ⚠ Playwright 请求返回 ${response.status()}，切换备用方式...`)
+  } catch (_) {}
+
+  // 方式2: 备用 — 使用 http.get（带 Referer 和完整 UA）
   return new Promise((resolve, reject) => {
     const file = createWriteStream(filepath)
     const protocol = url.startsWith('https') ? https : http
 
     protocol
-      .get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
-        // 处理重定向
+      .get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Referer: 'https://www.douyin.com/',
+        },
+      }, (response) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           file.close()
           fs.unlinkSync(filepath)
-          return downloadFile(response.headers.location, filepath).then(resolve).catch(reject)
+          return downloadFile(browserContext, response.headers.location, filepath).then(resolve).catch(reject)
         }
 
         if (response.statusCode !== 200) {
@@ -65,14 +86,8 @@ async function downloadFile(url, filepath) {
         }
 
         response.pipe(file)
-        file.on('finish', () => {
-          file.close()
-          resolve()
-        })
-        file.on('error', (err) => {
-          fs.unlinkSync(filepath)
-          reject(err)
-        })
+        file.on('finish', () => { file.close(); resolve() })
+        file.on('error', (err) => { fs.unlinkSync(filepath); reject(err) })
       })
       .on('error', (err) => {
         file.close()
@@ -373,14 +388,18 @@ async function main() {
             aweme?.video?.origin_cover?.url_list?.[0] ||
             ''
 
-          const desc = aweme?.desc || ''
+          // 提取标题：优先 desc，备选 text_extra、preview_title
+          const desc = aweme?.desc
+            || aweme?.text_extra?.map(t => t.hashtag_name || '').filter(Boolean).join(' ')
+            || aweme?.preview_title
+            || ''
           const awemeId = aweme?.aweme_id || ''
 
           if (videoUrl && awemeId && !seenVideoIds.has(awemeId)) {
             seenVideoIds.add(awemeId)
             videoData.push({
               videoId: awemeId,
-              title: desc,
+              title: desc.trim(),
               cover: coverUrl,
               videoUrl: videoUrl.replace(/^\/\//, 'https://'),
             })
@@ -497,7 +516,7 @@ async function main() {
     try {
       if (v.videoUrl && !fs.existsSync(videoFile)) {
         process.stdout.write('    下载视频... ')
-        await downloadFile(v.videoUrl, videoFile)
+        await downloadFile(context, v.videoUrl, videoFile)
         console.log(`✓ (${(fs.statSync(videoFile).size / 1024 / 1024).toFixed(1)}MB)`)
       } else if (fs.existsSync(videoFile)) {
         console.log(`    视频已缓存 (${(fs.statSync(videoFile).size / 1024 / 1024).toFixed(1)}MB)`)
@@ -512,7 +531,7 @@ async function main() {
     try {
       if (v.cover && !fs.existsSync(coverFile)) {
         process.stdout.write('    下载封面... ')
-        await downloadFile(v.cover, coverFile)
+        await downloadFile(context, v.cover, coverFile)
         console.log('✓')
       }
     } catch (_) {

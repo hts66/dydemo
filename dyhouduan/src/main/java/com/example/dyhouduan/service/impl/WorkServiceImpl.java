@@ -107,6 +107,12 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     }
 
     @Override
+    public List<Work> searchWorks(String keyword, int page, int size) {
+        int offset = (page - 1) * size;
+        return baseMapper.selectByKeyword(keyword, offset, size);
+    }
+
+    @Override
     @Transactional
     public boolean deleteWorkWithLikes(Long id) {
         Work work = getById(id);

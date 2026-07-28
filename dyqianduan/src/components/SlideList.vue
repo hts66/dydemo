@@ -415,8 +415,9 @@ const doShare = async (friend) => {
   const w = currentWork.value
   if (!w) return
   const title = w.title || '无标题'
+  const description = w.description || ''
   try {
-    await sendMessage(friend.id, `📹 [分享视频] ${title}\n${w.url}`)
+    await sendMessage(friend.id, `📹 [分享视频] ${w.id}\n${title}\n${description}\n${w.url}`)
     shareOk.value = true
     setTimeout(() => { showShare.value = false; shareOk.value = false }, 1000)
   } catch (_) {}

@@ -1,17 +1,17 @@
 <template>
-  <div class="featured-container" @scroll="handleScroll">
-    <!-- 视频网格 -->
+  <div class="search-results" @scroll="handleScroll">
+    <!-- 视频网格 — 与精选界面完全一致 -->
     <div class="video-grid">
-      <div 
-        v-for="work in filteredWorks" 
+      <div
+        v-for="work in works"
         :key="work.id"
         class="video-card"
         @click="openVideo(work)"
       >
         <div class="video-thumbnail">
-          <img 
-            :src="work.thumbnail || work.url" 
-            :alt="work.title" 
+          <img
+            :src="work.thumbnail || work.url"
+            :alt="work.title"
             @error="handleThumbnailError($event, work)"
           />
           <div class="video-duration">{{ formatDuration(work.duration) }}</div>
@@ -22,7 +22,7 @@
           </div>
         </div>
         <div class="video-info">
-          <h3 class="video-title">{{ work.title || '无标题' }}</h3>
+          <h3 class="video-title">{{ work.title || '' }}</h3>
           <p class="video-description" v-if="work.description">{{ work.description }}</p>
           <div class="video-meta">
             <div class="author-section">
@@ -30,7 +30,7 @@
                 v-if="!isOwnVideo(work)"
                 class="author-follow-btn"
                 :class="{ followed: work.isFollowing }"
-                @click.stop="handleFollow(work)"
+                @click.stop="handleFollowCard(work)"
               >
                 <img :src="work.avatar || defaultAvatar" @click.stop="goToProfile(work.userId)" />
                 <svg v-if="!work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
@@ -59,9 +59,15 @@
       <div v-if="loading" class="loading-state">
         <p>加载中...</p>
       </div>
+      <div v-if="!loading && works.length === 0 && keyword" class="empty-state">
+        <p>没有找到与 "{{ keyword }}" 相关的视频</p>
+      </div>
+      <div v-if="!keyword && works.length === 0" class="empty-state">
+        <p>在顶部搜索框中输入关键词搜索视频</p>
+      </div>
     </div>
 
-    <!-- 视频播放弹窗 -->
+    <!-- 视频播放弹窗 — 与精选界面一致 -->
     <div v-if="currentVideo" class="video-modal" @click.self="closeVideo">
       <div class="modal-content">
         <button class="close-btn" @click="closeVideo">✕</button>
@@ -88,7 +94,7 @@
                 :class="{ followed: currentVideo.isFollowing }"
                 @click.stop="handleFollow"
               >
-                <img :src="currentVideo.avatar || defaultAvatar" @click.stop="goToProfile" />
+                <img :src="currentVideo.avatar || defaultAvatar" @click.stop="goToProfile(currentVideo.userId)" />
                 <svg v-if="!currentVideo.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                   <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                 </svg>
@@ -181,16 +187,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch, onMounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getWorks } from '../api/work'
+import { searchWorks } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
 import { sendMessage } from '../api/message'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
@@ -202,15 +209,13 @@ const getProxyUrl = (url) => {
   return url
 }
 
-
+const keyword = ref('')
 const works = ref([])
 const currentVideo = ref(null)
+const videoPlayer = ref(null)
 const comments = ref([])
 const commentInput = ref('')
-const videoPlayer = ref(null)
 const commentsSection = ref(null)
-
-// 分页懒加载
 const page = ref(1)
 const hasMore = ref(true)
 const loading = ref(false)
@@ -221,12 +226,7 @@ const shareSuccess = ref(false)
 const friends = ref([])
 
 const toggleSharePopup = async () => {
-  if (showSharePopup.value) {
-    showSharePopup.value = false
-    shareSuccess.value = false
-    return
-  }
-  // 加载好友列表
+  if (showSharePopup.value) { showSharePopup.value = false; shareSuccess.value = false; return }
   if (userStore.user?.id) {
     try {
       const result = await getFriends(userStore.user.id)
@@ -248,9 +248,14 @@ const shareToFriend = async (friend) => {
   } catch (_) {}
 }
 
-const filteredWorks = computed(() => works.value)
-
-const loadWorks = async (reset = false) => {
+const doSearch = async (reset = false) => {
+  const kw = (route.query.keyword || '').trim()
+  if (!kw) {
+    keyword.value = ''
+    works.value = []
+    return
+  }
+  keyword.value = kw
   if (loading.value) return
   if (reset) {
     page.value = 1
@@ -260,7 +265,8 @@ const loadWorks = async (reset = false) => {
   if (!hasMore.value) return
   loading.value = true
   try {
-    const result = await getWorks(page.value, 12)
+    const result = await searchWorks(kw, page.value, 12)
+    console.log('搜索 API 返回:', result)
     if (result.code === 200) {
       if (result.data.length === 0) {
         hasMore.value = false
@@ -269,15 +275,9 @@ const loadWorks = async (reset = false) => {
           work.isLiked = false
           work.isFollowing = false
           if (userStore.isLoggedIn) {
-            try {
-              const likeResult = await checkIsLiked(work.id)
-              if (likeResult.code === 200) work.isLiked = likeResult.data
-            } catch (e) {}
+            try { const r = await checkIsLiked(work.id); if (r.code === 200) work.isLiked = r.data } catch (_) {}
             if (work.userId) {
-              try {
-                const followResult = await checkIsFollowing(work.userId)
-                if (followResult.code === 200) work.isFollowing = followResult.data
-              } catch (e) {}
+              try { const r = await checkIsFollowing(work.userId); if (r.code === 200) work.isFollowing = r.data } catch (_) {}
             }
           }
         }
@@ -286,7 +286,7 @@ const loadWorks = async (reset = false) => {
       }
     }
   } catch (err) {
-    console.error('加载视频失败', err)
+    console.error('搜索失败，错误详情:', err.response?.status, err.response?.data || err.message)
   } finally {
     loading.value = false
   }
@@ -295,9 +295,17 @@ const loadWorks = async (reset = false) => {
 const handleScroll = (event) => {
   const { scrollTop, scrollHeight, clientHeight } = event.target
   if (scrollTop + clientHeight >= scrollHeight - 150) {
-    loadWorks()
+    doSearch()
   }
 }
+
+watch(() => route.query.keyword, () => {
+  doSearch(true)
+})
+
+onMounted(() => {
+  doSearch(true)
+})
 
 const handleThumbnailError = (event, work) => {
   const img = event.target
@@ -308,55 +316,37 @@ const handleThumbnailError = (event, work) => {
   }
 }
 
-onMounted(async () => {
-  await loadWorks()
-})
-
 const openVideo = async (work) => {
   currentVideo.value = work
   document.body.style.overflow = 'hidden'
   comments.value = []
-  
+
   try {
     const [likeResult, commentResult, followResult] = await Promise.all([
       checkIsLiked(work.id),
       getComments(work.id),
-      userStore.isLoggedIn ? checkIsFollowing(work.userId) : Promise.resolve({ code: 200, data: false })
+      userStore.isLoggedIn && work.userId ? checkIsFollowing(work.userId) : Promise.resolve({ code: 200, data: false })
     ])
-    if (likeResult.code === 200) {
-      currentVideo.value.isLiked = likeResult.data
-    }
-    if (commentResult.code === 200) {
-      comments.value = commentResult.data
-    }
-    if (followResult.code === 200) {
-      currentVideo.value.isFollowing = followResult.data
-    }
-  } catch (err) {
-    console.error('加载视频信息失败', err)
-  }
-  
+    if (likeResult.code === 200) currentVideo.value.isLiked = likeResult.data
+    if (commentResult.code === 200) comments.value = commentResult.data
+    if (followResult.code === 200) currentVideo.value.isFollowing = followResult.data
+  } catch (_) {}
+
   await nextTick()
-  
   if (videoPlayer.value) {
     videoPlayer.value.currentTime = 0
     videoPlayer.value.muted = false
     videoPlayer.value.play().catch(e => {
-      // 浏览器阻止不静音自动播放时，回退到静音
       if (e.name === 'NotAllowedError') {
         videoPlayer.value.muted = true
-        videoPlayer.value.play().catch(err => console.error('播放失败', err))
-      } else {
-        console.error('播放失败', e)
+        videoPlayer.value.play().catch(() => {})
       }
     })
   }
 }
 
 const closeVideo = () => {
-  if (videoPlayer.value) {
-    videoPlayer.value.pause()
-  }
+  if (videoPlayer.value) videoPlayer.value.pause()
   currentVideo.value = null
   comments.value = []
   commentInput.value = ''
@@ -364,82 +354,67 @@ const closeVideo = () => {
 }
 
 const handleLike = async () => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
-    return
-  }
-  
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
   try {
     const result = await toggleLike(currentVideo.value.id)
     if (result.code === 200) {
       currentVideo.value.isLiked = result.data
       currentVideo.value.likesCount += result.data ? 1 : -1
     }
-  } catch (err) {
-    console.error('点赞失败', err)
-  }
+  } catch (_) {}
 }
 
-const handleFollow = async (work) => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
-    return
-  }
-  
-  const targetWork = work || currentVideo.value
-  if (!targetWork) return
-  
+const handleFollow = async () => {
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
+  if (!currentVideo.value) return
   try {
-    const result = await toggleFollow(targetWork.userId)
+    const result = await toggleFollow(currentVideo.value.userId)
     if (result.code === 200) {
-      targetWork.isFollowing = result.data
-      if (work) {
-        const idx = filteredWorks.value.findIndex(w => w.id === work.id)
-        if (idx !== -1) {
-          filteredWorks.value[idx].isFollowing = result.data
-        }
-      }
+      currentVideo.value.isFollowing = result.data
+      const idx = works.value.findIndex(w => w.id === currentVideo.value.id)
+      if (idx !== -1) works.value[idx].isFollowing = result.data
     }
-  } catch (err) {
-    console.error('关注失败', err)
-  }
+  } catch (_) {}
 }
 
-const goToProfile = (userId) => {
-  const targetUserId = userId || (currentVideo.value && currentVideo.value.userId)
-  if (targetUserId) {
-    router.push(`/profile/${targetUserId}`)
-  }
+const handleFollowCard = async (work) => {
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
+  try {
+    const result = await toggleFollow(work.userId)
+    if (result.code === 200) {
+      const idx = works.value.findIndex(w => w.id === work.id)
+      if (idx !== -1) works.value[idx].isFollowing = result.data
+    }
+  } catch (_) {}
 }
 
 const handleComment = async () => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
-    return
-  }
-  
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
   if (!commentInput.value.trim()) return
-  
   try {
     const result = await addComment(currentVideo.value.id, commentInput.value.trim())
     if (result.code === 200) {
       commentInput.value = ''
       currentVideo.value.commentsCount++
-      
       const commentResult = await getComments(currentVideo.value.id)
-      if (commentResult.code === 200) {
-        comments.value = commentResult.data
-      }
+      if (commentResult.code === 200) comments.value = commentResult.data
     }
-  } catch (err) {
-    console.error('评论失败', err)
-  }
+  } catch (_) {}
 }
 
 const scrollToComments = () => {
   nextTick(() => {
     commentsSection.value?.scrollIntoView({ behavior: 'smooth' })
   })
+}
+
+const goToProfile = (userId) => {
+  if (userId) router.push(`/profile/${userId}`)
+}
+
+const isOwnVideo = (work) => {
+  if (!userStore.isLoggedIn || !userStore.user || !work) return false
+  return work.userId === userStore.user.id
 }
 
 const formatCount = (count) => {
@@ -455,45 +430,29 @@ const formatDuration = (seconds) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-const isOwnVideo = (work) => {
-  if (!userStore.isLoggedIn || !userStore.user || !work) return false
-  return work.userId === userStore.user.id
-}
-
 const formatTime = (dateStr) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
-  
   const minutes = Math.floor(diff / 60000)
   if (minutes < 60) return `${minutes}分钟前`
-  
   const hours = Math.floor(diff / 3600000)
   if (hours < 24) return `${hours}小时前`
-  
   const days = Math.floor(diff / 86400000)
   return `${days}天前`
 }
-
 </script>
 
 <style scoped>
-.featured-container {
-  height: 100%;
+.search-results {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
   overflow-y: auto;
   background: #1a1a1a;
 }
 
-.loading-state {
-  text-align: center;
-  padding: 20px 0;
-  color: #888;
-  font-size: 13px;
-  grid-column: 1 / -1;
-}
-
-/* 视频网格 */
+/* 视频网格 — 与精选界面完全一致 */
 .video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -508,10 +467,7 @@ const formatTime = (dateStr) => {
   cursor: pointer;
   transition: transform 0.2s;
 }
-
-.video-card:hover {
-  transform: translateY(-4px);
-}
+.video-card:hover { transform: translateY(-4px); }
 
 .video-thumbnail {
   position: relative;
@@ -519,481 +475,257 @@ const formatTime = (dateStr) => {
   padding-top: 56.25%;
   overflow: hidden;
 }
-
 .video-thumbnail img {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   object-fit: cover;
 }
 
 .video-duration {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
+  bottom: 8px; right: 8px;
   padding: 2px 6px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0,0,0,0.7);
   border-radius: 4px;
-  font-size: 12px;
-  color: #fff;
+  font-size: 12px; color: #fff;
 }
 
 .play-icon {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   opacity: 0;
   transition: opacity 0.2s;
 }
+.video-card:hover .play-icon { opacity: 1; }
 
-.video-card:hover .play-icon {
-  opacity: 1;
-}
-
-.video-info {
-  padding: 12px;
-}
+.video-info { padding: 12px; }
 
 .video-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
+  font-size: 14px; font-weight: 500; color: #fff;
   margin-bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   line-height: 1.4;
 }
 
 .video-description {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px; color: rgba(255,255,255,0.6);
   margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   line-height: 1.4;
 }
 
 .video-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #888;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: #888;
 }
 
 .author-section {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: flex; align-items: center; gap: 6px;
 }
 
 .author-follow-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  position: relative;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer;
+  padding: 0; margin: 0; position: relative;
+  width: 28px; height: 28px; flex-shrink: 0;
 }
-
 .author-follow-btn img {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  width: 24px; height: 24px;
+  border-radius: 50%; object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.6);
   cursor: pointer;
 }
-
-.author-follow-btn.followed img {
-  border-color: #fe2c55;
-}
-
+.author-follow-btn.followed img { border-color: #fe2c55; }
 .author-follow-btn svg {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 12px;
-  height: 12px;
-  background: #fe2c55;
-  border-radius: 50%;
-  padding: 2px;
-  border: 1px solid rgba(0, 0, 0, 0.5);
+  position: absolute; bottom: 0; right: 0;
+  width: 12px; height: 12px;
+  background: #fe2c55; border-radius: 50%;
+  padding: 2px; border: 1px solid rgba(0,0,0,0.5);
 }
 
 .video-author {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .stats-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: flex; align-items: center; gap: 12px;
 }
 
 .video-stat {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: flex; align-items: center; gap: 4px;
 }
 
-/* 视频弹窗 */
+.loading-state {
+  text-align: center; padding: 20px 0; color: #888;
+  font-size: 13px; grid-column: 1 / -1;
+}
+
+.empty-state {
+  text-align: center; padding: 60px 0; color: #888;
+  grid-column: 1 / -1;
+}
+.empty-state p { margin: 0; font-size: 15px; }
+
+/* 视频弹窗 — 与精选界面一致 */
 .video-modal {
-  position: fixed;
-  top: 0;
-  left: 200px;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  position: fixed; top: 0; left: 200px; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.95); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
 }
 
 .modal-content {
-  position: relative;
-  width: 90%;
-  max-width: 900px;
-  height: 90vh;
-  background: #1a1a1a;
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  position: relative; width: 90%; max-width: 900px; height: 90vh;
+  background: #1a1a1a; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column;
 }
 
 .close-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-  z-index: 10;
+  position: absolute; top: 12px; right: 12px;
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.2); border: none; border-radius: 50%;
+  color: #fff; font-size: 18px; cursor: pointer; z-index: 10;
 }
 
-.modal-body {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
+.modal-body { flex: 1; display: flex; overflow: hidden; }
 
 .video-section {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex: 1; display: flex; align-items: center; justify-content: center;
   background: #000;
 }
 
-.modal-video {
-  max-width: 100%;
-  max-height: 100%;
-}
+.modal-video { max-width: 100%; max-height: 100%; }
 
 .interaction-section {
-  width: 350px;
-  display: flex;
-  flex-direction: column;
-  background: #1a1a1a;
-  border-left: 1px solid #333;
+  width: 350px; display: flex; flex-direction: column;
+  background: #1a1a1a; border-left: 1px solid #333;
 }
 
 .author-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px;
-  border-bottom: 1px solid #333;
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px; border-bottom: 1px solid #333;
 }
 
 .follow-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  position: relative;
-  width: 50px;
-  height: 50px;
-  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer;
+  padding: 0; margin: 0; position: relative;
+  width: 50px; height: 50px; flex-shrink: 0;
 }
-
 .follow-btn img {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  cursor: pointer;
+  width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.8); cursor: pointer;
 }
-
-.follow-btn.followed img {
-  border-color: #fe2c55;
-}
-
+.follow-btn.followed img { border-color: #fe2c55; }
 .follow-btn svg {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 18px;
-  height: 18px;
-  background: #fe2c55;
-  border-radius: 50%;
-  padding: 3px;
-  border: 2px solid rgba(0, 0, 0, 0.5);
+  position: absolute; bottom: 0; right: 0;
+  width: 18px; height: 18px;
+  background: #fe2c55; border-radius: 50%;
+  padding: 3px; border: 2px solid rgba(0,0,0,0.5);
 }
+.follow-btn:hover { transform: scale(1.1); }
 
-.follow-btn:hover {
-  transform: scale(1.1);
-}
-
-.author-name {
-  flex: 1;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 500;
-}
+.author-name { flex: 1; color: #fff; font-size: 16px; font-weight: 500; }
 
 .action-bar {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
+  display: flex; gap: 16px; padding: 16px;
   border-bottom: 1px solid #333;
 }
 
 .action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 20px; background: rgba(255,255,255,0.1);
+  border: none; border-radius: 20px;
+  color: #fff; font-size: 14px; cursor: pointer;
   transition: all 0.3s;
 }
-
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.action-btn.liked {
-  background: rgba(254, 44, 85, 0.2);
-}
+.action-btn:hover { background: rgba(255,255,255,0.2); }
+.action-btn.liked { background: rgba(254,44,85,0.2); }
 
 .comments-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
 }
 
 .comments-title {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 500;
-  padding: 12px 16px;
-  margin: 0;
+  color: #fff; font-size: 16px; font-weight: 500;
+  padding: 12px 16px; margin: 0;
   border-bottom: 1px solid #333;
 }
 
 .comments-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
+  flex: 1; overflow-y: auto; padding: 12px 16px;
 }
 
 .comment-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid #2a2a2a;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid #2a2a2a;
 }
 
 .comment-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  cursor: pointer;
+  width: 36px; height: 36px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0; cursor: pointer;
 }
 
 .comment-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex: 1; display: flex; flex-direction: column; gap: 4px;
 }
 
-.comment-author {
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.comment-text {
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
-}
-
-.comment-time {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  flex-shrink: 0;
-}
+.comment-author { color: #fff; font-size: 14px; font-weight: 500; }
+.comment-text { color: rgba(255,255,255,0.8); font-size: 13px; }
+.comment-time { color: rgba(255,255,255,0.5); font-size: 12px; flex-shrink: 0; }
 
 .no-comments {
-  text-align: center;
-  padding: 40px 0;
-  color: rgba(255, 255, 255, 0.5);
+  text-align: center; padding: 40px 0;
+  color: rgba(255,255,255,0.5);
 }
 
 .comment-input-section {
-  display: flex;
-  gap: 10px;
-  padding: 12px 16px;
-  border-top: 1px solid #333;
+  display: flex; gap: 10px;
+  padding: 12px 16px; border-top: 1px solid #333;
 }
 
 .comment-input {
   flex: 1;
   padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid #333;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 14px;
-  outline: none;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid #333; border-radius: 20px;
+  color: #fff; font-size: 14px; outline: none;
 }
-
-.comment-input:focus {
-  border-color: #fe2c55;
-}
+.comment-input:focus { border-color: #fe2c55; }
 
 .send-btn {
   padding: 10px 24px;
-  background: #fe2c55;
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  font-size: 14px;
-  cursor: pointer;
+  background: #fe2c55; color: #fff;
+  border: none; border-radius: 20px;
+  font-size: 14px; cursor: pointer;
 }
+.send-btn:hover:not(:disabled) { background: #e0264d; }
+.send-btn:disabled { background: #555; cursor: not-allowed; }
 
-.send-btn:hover:not(:disabled) {
-  background: #e0264d;
-}
-
-.send-btn:disabled {
-  background: #555;
-  cursor: not-allowed;
-}
-
-.share-wrapper {
-  position: relative;
-}
-
+.share-wrapper { position: relative; }
 .share-popup {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 8px;
-  width: 220px;
-  background: #2a2a2a;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-  z-index: 100;
+  position: absolute; bottom: 100%; left: 0; margin-bottom: 8px;
+  width: 220px; background: #2a2a2a; border-radius: 12px;
+  overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.4); z-index: 100;
 }
-
 .share-popup-header {
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-  border-bottom: 1px solid #3a3a3a;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  padding: 12px 16px; font-size: 14px; font-weight: 500;
+  color: #fff; border-bottom: 1px solid #3a3a3a;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.share-popup-close {
-  background: none; border: none; color: #888; font-size: 16px; cursor: pointer; padding: 2px 6px;
-}
+.share-popup-close { background: none; border: none; color: #888; font-size: 16px; cursor: pointer; padding: 2px 6px; }
 .share-popup-close:hover { color: #fff; }
-
-.share-popup-list {
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.share-no-friends {
-  padding: 24px 16px;
-  text-align: center;
-  color: #888;
-  font-size: 13px;
-}
-
+.share-popup-list { max-height: 240px; overflow-y: auto; }
+.share-no-friends { padding: 24px 16px; text-align: center; color: #888; font-size: 13px; }
 .share-friend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  cursor: pointer;
-  transition: background 0.15s;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; cursor: pointer; transition: background 0.15s;
 }
-
-.share-friend-item:hover {
-  background: #3a3a3a;
-}
-
-.share-friend-item img {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.share-friend-item span {
-  color: #fff;
-  font-size: 13px;
-}
-
-.share-success {
-  padding: 10px 16px;
-  text-align: center;
-  color: #2ecc71;
-  font-size: 13px;
-  border-top: 1px solid #3a3a3a;
-}
+.share-friend-item:hover { background: #3a3a3a; }
+.share-friend-item img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.share-friend-item span { color: #fff; font-size: 13px; }
+.share-success { padding: 10px 16px; text-align: center; color: #2ecc71; font-size: 13px; border-top: 1px solid #3a3a3a; }
 </style>

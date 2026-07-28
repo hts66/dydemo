@@ -68,4 +68,18 @@ public interface WorkMapper extends BaseMapper<Work> {
             "ORDER BY w.created_at DESC" +
             "</script>")
     List<Work> selectByUserIds(@Param("userIds") List<Long> userIds);
+
+    @Select("SELECT w.*, u.username, u.avatar " +
+            "FROM works w " +
+            "LEFT JOIN users u ON w.user_id = u.id " +
+            "WHERE w.title LIKE CONCAT('%', #{keyword}, '%') " +
+            "   OR w.description LIKE CONCAT('%', #{keyword}, '%') " +
+            "ORDER BY " +
+            "  (CASE WHEN w.title LIKE CONCAT('%', #{keyword}, '%') THEN 10 ELSE 0 END " +
+            "   + CASE WHEN w.description LIKE CONCAT('%', #{keyword}, '%') THEN 3 ELSE 0 END) DESC, " +
+            "  w.created_at DESC " +
+            "LIMIT #{offset}, #{limit}")
+    List<Work> selectByKeyword(@Param("keyword") String keyword,
+                               @Param("offset") int offset,
+                               @Param("limit") int limit);
 }

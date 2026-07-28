@@ -88,6 +88,17 @@ const router = createRouter({
       name: 'Upload',
       component: () => import('../views/UploadVideo.vue'),
     },
+    {
+      path: '/search',
+      component: MainLayout,
+      children: [
+        {
+          path: '',
+          name: 'Search',
+          component: () => import('../views/Search.vue'),
+        },
+      ],
+    },
   ],
 })
 

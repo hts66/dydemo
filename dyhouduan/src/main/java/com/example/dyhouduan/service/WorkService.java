@@ -24,4 +24,6 @@ public interface WorkService extends IService<Work> {
     void incrementViews(Long workId);
 
     int batchPublishWorks(Long userId, List<Work> works);
+
+    List<Work> searchWorks(String keyword, int page, int size);
 }

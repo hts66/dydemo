@@ -90,8 +90,11 @@
         </template>
         <template v-else>
           <button class="batch-btn cancel" @click="exitBatchMode">取消</button>
-          <button 
-            class="batch-btn confirm" 
+          <button class="batch-btn select-all" @click="toggleSelectAll">
+            {{ isAllSelected() ? '取消全选' : '全选' }}
+          </button>
+          <button
+            class="batch-btn confirm"
             :disabled="selectedItems.length === 0"
             @click="confirmBatchAction"
           >
@@ -431,7 +434,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getWorks, deleteWork } from '../api/work'
+import { getWorks, deleteWork, getUserWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
 import { getLikedWorks, toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { sendMessage } from '../api/message'
@@ -570,10 +573,9 @@ const handleScroll = (event) => {
   const maxHeight = 300
   const newHeight = Math.max(minHeight, maxHeight - scrollTop * 0.5)
   headerHeight.value = newHeight
-  // 触底加载更多
+  // 触底加载更多（getUserWorks 一次性返回全部作品，无需分页；喜欢列表仍支持分页）
   if (scrollTop + clientHeight >= scrollHeight - 150) {
-    if (activeTab.value === 'works') loadMyWorks()
-    else if (activeTab.value === 'liked') loadLikedWorks()
+    if (activeTab.value === 'liked') loadLikedWorks()
   }
 }
 
@@ -678,23 +680,11 @@ const saveProfile = async () => {
 const loadMyWorks = async (reset = false) => {
   if (!userStore.user) return
   if (worksLoading.value) return
-  if (reset) {
-    worksPage.value = 1
-    worksHasMore.value = true
-    myWorks.value = []
-  }
-  if (!worksHasMore.value) return
   worksLoading.value = true
   try {
-    const result = await getWorks(worksPage.value, 12)
+    const result = await getUserWorks(userStore.user.id)
     if (result.code === 200) {
-      const filtered = result.data.filter(w => w.userId === userStore.user.id)
-      if (result.data.length === 0) {
-        worksHasMore.value = false
-      } else {
-        myWorks.value.push(...filtered)
-        worksPage.value++
-      }
+      myWorks.value = result.data || []
       worksCount.value = myWorks.value.length
     }
   } catch (err) {
@@ -804,7 +794,8 @@ const toggleSharePopup = async () => {
 const shareToFriend = async (friend) => {
   if (!currentVideo.value) return
   const title = currentVideo.value.title || '无标题'
-  const content = `📹 [分享视频] ${title}\n${currentVideo.value.url}`
+  const description = currentVideo.value.description || ''
+  const content = `📹 [分享视频] ${currentVideo.value.id}\n${title}\n${description}\n${currentVideo.value.url}`
   try {
     await sendMessage(friend.id, content)
     shareSuccess.value = true
@@ -865,6 +856,31 @@ const toggleSelectItem = (id) => {
     selectedItems.value.splice(index, 1)
   } else {
     selectedItems.value.push(id)
+  }
+}
+
+// 获取当前 tab 对应的列表数据
+const getCurrentList = () => {
+  switch (activeTab.value) {
+    case 'works': return myWorks.value
+    case 'liked': return likedWorks.value
+    case 'following': return followingList.value
+    default: return []
+  }
+}
+
+const isAllSelected = () => {
+  const list = getCurrentList()
+  if (list.length === 0) return false
+  return list.every(item => selectedItems.value.includes(item.id))
+}
+
+const toggleSelectAll = () => {
+  if (isAllSelected()) {
+    selectedItems.value = []
+  } else {
+    const list = getCurrentList()
+    selectedItems.value = list.map(item => item.id)
   }
 }
 
@@ -1177,6 +1193,14 @@ onMounted(() => {
 }
 
 .batch-btn.cancel:hover {
+  background: #4a4a4a;
+}
+
+.batch-btn.select-all {
+  background: #3a3a3a;
+}
+
+.batch-btn.select-all:hover {
   background: #4a4a4a;
 }
 

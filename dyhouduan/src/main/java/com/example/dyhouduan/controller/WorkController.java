@@ -38,14 +38,22 @@ public class WorkController {
     private WatchHistoryService watchHistoryService;
 
     /**
-     * 获取视频列表（分页）
+     * 获取视频列表（分页），可选 keyword 参数进行搜索
      */
     @GetMapping
     public Response<List<Work>> getWorks(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
         try {
-            List<Work> works = workService.getWorksWithUser(page, size);
+            log.info("getWorks 请求: page={}, size={}, keyword=[{}]", page, size, keyword);
+            List<Work> works;
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                log.info("进入搜索模式, keyword={}", keyword.trim());
+                works = workService.searchWorks(keyword.trim(), page, size);
+            } else {
+                works = workService.getWorksWithUser(page, size);
+            }
             return Response.success(works);
         } catch (Exception e) {
             log.error("获取视频列表失败", e);

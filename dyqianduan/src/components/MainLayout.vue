@@ -56,8 +56,23 @@
       <!-- 顶部栏 -->
       <header class="top-bar">
         <div class="search-container">
-          <input type="text" placeholder="搜索你感兴趣的内容" class="search-input" />
-          <button class="search-btn">
+          <button
+            v-if="$route.path === '/search'"
+            class="top-back-btn"
+            @click="$router.back()"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="#fff">
+              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+            </svg>
+          </button>
+          <input
+            type="text"
+            v-model="searchKeyword"
+            placeholder="搜索你感兴趣的内容"
+            class="search-input"
+            @keyup.enter="doSearch"
+          />
+          <button class="search-btn" @click="doSearch">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
             </svg>
@@ -168,8 +183,8 @@
                       <svg viewBox="0 0 24 24" width="36" height="36" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
                     </div>
                     <div class="share-video-info">
-                      <span class="share-video-label">📹 分享的视频</span>
-                      <span class="share-video-title">{{ getShareTitle(msg.content) }}</span>
+                      <span class="share-video-label">{{ getShareTitle(msg.content) }}</span>
+                      <span class="share-video-desc" v-if="getShareDescription(msg.content)">{{ getShareDescription(msg.content) }}</span>
                     </div>
                   </div>
                 </template>
@@ -199,22 +214,112 @@
       </div>
     </div>
 
-    <!-- 分享视频播放器 -->
+    <!-- 分享视频播放器 — 完整模态体验（与精选界面一致） -->
     <div v-if="showSharedVideo" class="shared-video-overlay" @click.self="closeSharedVideo">
-      <div class="shared-video-modal">
-        <button class="shared-video-close" @click="closeSharedVideo">✕</button>
-        <video :src="sharedVideoUrl" class="shared-video-player" controls autoplay></video>
+      <div class="shared-video-container">
+        <button class="shared-video-close" @click="closeSharedVideo">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="#fff">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+          <span>返回</span>
+        </button>
+        <div class="shared-video-body">
+          <div class="shared-video-section">
+            <video
+              :src="sharedVideoUrl"
+              class="shared-video-player"
+              controls
+              autoplay
+              playsinline
+              webkit-playsinline
+              x5-playsinline
+            ></video>
+          </div>
+          <div class="shared-interaction-section">
+            <div class="shared-author-bar">
+              <button
+                v-if="sharedVideoData && sharedVideoData.userId && sharedVideoData.userId !== userStore.user?.id"
+                class="shared-follow-btn"
+                :class="{ followed: sharedVideoData.isFollowing }"
+                @click.stop="handleSharedFollow"
+              >
+                <img :src="sharedVideoData.avatar || defaultAvatar" @click.stop="goToSharedProfile" />
+                <svg v-if="!sharedVideoData.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+              </button>
+              <span class="shared-author-name">{{ sharedVideoData?.username || '匿名用户' }}</span>
+            </div>
+            <div class="shared-video-info-panel">
+              <h4 class="shared-video-panel-title">{{ sharedVideoData?.title || sharedVideoData?.description || '无标题' }}</h4>
+              <p class="shared-video-panel-desc" v-if="sharedVideoData?.description">{{ sharedVideoData.description }}</p>
+            </div>
+            <div class="shared-action-bar" v-if="canInteract">
+              <button
+                class="shared-action-btn"
+                :class="{ liked: sharedVideoData?.isLiked }"
+                @click="handleSharedLike"
+              >
+                <svg v-if="sharedVideoData?.isLiked" viewBox="0 0 24 24" width="20" height="20" fill="#fe2c55">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="#fff">
+                  <path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/>
+                </svg>
+                <span>{{ formatCount(sharedVideoData?.likesCount || 0) }}</span>
+              </button>
+              <button class="shared-action-btn" @click="scrollSharedToComments">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">
+                  <path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/>
+                </svg>
+                <span>{{ formatCount(sharedVideoData?.commentsCount || 0) }}</span>
+              </button>
+            </div>
+            <div class="shared-comments-section" ref="sharedCommentsRef">
+              <h4 class="shared-comments-title">评论</h4>
+              <div class="shared-comments-list">
+                <div v-for="comment in sharedVideoComments" :key="comment.id" class="shared-comment-item">
+                  <img :src="comment.avatar || defaultAvatar" class="shared-comment-avatar" />
+                  <div class="shared-comment-content">
+                    <span class="shared-comment-author">{{ comment.username || '匿名用户' }}</span>
+                    <span class="shared-comment-text">{{ comment.content }}</span>
+                  </div>
+                  <span class="shared-comment-time">{{ formatTimeAgo(comment.createdAt) }}</span>
+                </div>
+                <div v-if="sharedVideoComments.length === 0" class="shared-no-comments">
+                  <p>暂无评论，快来抢沙发吧~</p>
+                </div>
+              </div>
+              <div class="shared-comment-input-section" v-if="canInteract">
+                <input
+                  type="text"
+                  v-model="sharedVideoCommentInput"
+                  class="shared-comment-input"
+                  placeholder="输入评论..."
+                  @keyup.enter="handleSharedComment"
+                  :disabled="!userStore.isLoggedIn"
+                />
+                <button class="shared-send-btn" @click="handleSharedComment" :disabled="!sharedVideoCommentInput.trim() || !userStore.isLoggedIn">
+                  发送
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
-import { getFriends } from '../api/follow'
+import { getFriends, toggleFollow, checkIsFollowing } from '../api/follow'
 import { getChatMessages, sendMessage, saveBotMessage } from '../api/message'
+import { getWorkById } from '../api/work'
+import { toggleLike, isLiked as checkIsLiked } from '../api/like'
+import { getComments, addComment } from '../api/comment'
 import request from '../utils/request'
 
 const userStore = useUserStore()
@@ -230,6 +335,14 @@ const AI_BOT = {
 const showFriends = ref(false)
 const friends = ref([])
 let friendsTimeout = null
+
+// 搜索
+const searchKeyword = ref('')
+const doSearch = () => {
+  const kw = searchKeyword.value.trim()
+  if (!kw) return
+  router.push({ path: '/search', query: { keyword: kw } })
+}
 
 const showChat = ref(false)
 const currentChatFriend = ref(null)
@@ -415,26 +528,205 @@ const formatMsgTime = (dateStr) => {
 // 分享视频相关
 const sharedVideoUrl = ref('')
 const showSharedVideo = ref(false)
+const sharedVideoData = ref(null)  // 完整的作品数据
 
 const isShareMsg = (content) => content && content.startsWith('📹 [分享视频]')
-const getShareTitle = (content) => {
+
+// 解析分享消息：兼容新旧格式
+// 旧格式(2行): 📹 [分享视频] {title}\n{url}
+// 新格式(4行): 📹 [分享视频] {id}\n{title}\n{description}\n{url}
+const parseShareMsg = (content) => {
   const lines = content.split('\n')
-  return lines[0]?.replace('📹 [分享视频] ', '') || '无标题'
-}
-const getShareUrl = (content) => {
-  const lines = content.split('\n')
-  return lines[1] || ''
-}
-const playSharedVideo = (content) => {
-  const url = getShareUrl(content)
-  if (url) {
-    sharedVideoUrl.value = `/api/video/proxy?url=${encodeURIComponent(url)}`
-    showSharedVideo.value = true
+  const prefix = '📹 [分享视频] '
+  const firstPart = lines[0]?.replace(prefix, '') || ''
+
+  if (lines.length >= 4) {
+    // 新格式：id, title, description, url
+    return {
+      workId: firstPart,
+      title: lines[1] || '无标题',
+      description: lines[2] || '',
+      url: lines[3] || '',
+      isNewFormat: true
+    }
+  } else {
+    // 旧格式：title, url
+    return {
+      workId: null,
+      title: firstPart || '无标题',
+      description: '',
+      url: lines[1] || '',
+      isNewFormat: false
+    }
   }
 }
+
+const getShareTitle = (content) => parseShareMsg(content).title
+const getShareDescription = (content) => parseShareMsg(content).description
+const getShareUrl = (content) => parseShareMsg(content).url
+const getShareWorkId = (content) => parseShareMsg(content).workId
+
+// 从后端获取完整作品数据
+const fetchVideoDetail = async (workId) => {
+  if (!workId) return null
+  try {
+    const result = await getWorkById(workId)
+    if (result.code === 200) return result.data
+  } catch (_) {}
+  return null
+}
+
+const playSharedVideo = async (content) => {
+  const parsed = parseShareMsg(content)
+  if (!parsed.url) return
+
+  sharedVideoUrl.value = `/api/video/proxy?url=${encodeURIComponent(parsed.url)}`
+
+  // 尝试获取完整作品数据
+  if (parsed.workId) {
+    const workData = await fetchVideoDetail(parseInt(parsed.workId))
+    if (workData) {
+      workData.isLiked = false
+      workData.isFollowing = false
+      // 补齐可能缺失的字段
+      workData.title = workData.title || parsed.title
+      workData.description = workData.description || parsed.description
+      workData.url = workData.url || parsed.url
+
+      if (userStore.isLoggedIn) {
+        try {
+          const [likeResult, followResult] = await Promise.all([
+            checkIsLiked(workData.id),
+            workData.userId ? checkIsFollowing(workData.userId) : Promise.resolve({ code: 200, data: false })
+          ])
+          if (likeResult.code === 200) workData.isLiked = likeResult.data
+          if (followResult.code === 200) workData.isFollowing = followResult.data
+        } catch (_) {}
+      }
+      sharedVideoData.value = workData
+
+      // 加载评论
+      try {
+        const commentResult = await getComments(workData.id)
+        if (commentResult.code === 200) {
+          sharedVideoComments.value = commentResult.data
+          scrollSharedCommentsToBottom()
+        }
+      } catch (_) {}
+    } else {
+      // 无法获取数据库数据时，用解析数据兜底
+      sharedVideoData.value = { id: parseInt(parsed.workId) || 0, title: parsed.title, description: parsed.description, url: parsed.url, username: '', avatar: '' }
+      sharedVideoComments.value = []
+    }
+  } else {
+    // 旧格式消息：无 workId，用解析数据兜底
+    sharedVideoData.value = { id: 0, title: parsed.title, description: parsed.description, url: parsed.url, username: '', avatar: '' }
+    sharedVideoComments.value = []
+  }
+
+  document.body.style.overflow = 'hidden'
+  showSharedVideo.value = true
+}
+
 const closeSharedVideo = () => {
   showSharedVideo.value = false
   sharedVideoUrl.value = ''
+  sharedVideoData.value = null
+  sharedVideoComments.value = []
+  sharedVideoCommentInput.value = ''
+  document.body.style.overflow = ''
+}
+
+// 分享视频详情面板 — 互动操作
+const sharedVideoComments = ref([])
+const sharedVideoCommentInput = ref('')
+
+// 只要有有效的作品 ID，就允许点赞和评论
+const canInteract = computed(() => !!(sharedVideoData.value?.id))
+
+const handleSharedLike = async () => {
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
+  if (!canInteract.value) return
+  try {
+    const result = await toggleLike(sharedVideoData.value.id)
+    if (result.code === 200) {
+      sharedVideoData.value.isLiked = result.data
+      sharedVideoData.value.likesCount = (sharedVideoData.value.likesCount || 0) + (result.data ? 1 : -1)
+    }
+  } catch (_) {}
+}
+
+const handleSharedFollow = async () => {
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
+  if (!sharedVideoData.value?.userId) return
+  try {
+    const result = await toggleFollow(sharedVideoData.value.userId)
+    if (result.code === 200) {
+      sharedVideoData.value.isFollowing = result.data
+    }
+  } catch (_) {}
+}
+
+const handleSharedComment = async () => {
+  if (!userStore.isLoggedIn) { router.push('/login'); return }
+  if (!sharedVideoCommentInput.value.trim() || !canInteract.value) return
+  try {
+    const result = await addComment(sharedVideoData.value.id, sharedVideoCommentInput.value.trim())
+    if (result.code === 200) {
+      sharedVideoCommentInput.value = ''
+      sharedVideoData.value.commentsCount = (sharedVideoData.value.commentsCount || 0) + 1
+      const commentResult = await getComments(sharedVideoData.value.id)
+      if (commentResult.code === 200) {
+        sharedVideoComments.value = commentResult.data
+        scrollSharedCommentsToBottom()
+      }
+    }
+  } catch (_) {}
+}
+
+const goToSharedProfile = () => {
+  if (sharedVideoData.value?.userId) {
+    router.push(`/profile/${sharedVideoData.value.userId}`)
+  }
+}
+
+const formatCount = (count) => {
+  if (!count) return '0'
+  if (count >= 10000) return (count / 10000).toFixed(1) + '万'
+  return count.toString()
+}
+
+const formatTimeAgo = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(diff / 3600000)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(diff / 86400000)
+  return `${days}天前`
+}
+
+const sharedCommentsRef = ref(null)
+
+const scrollSharedToComments = () => {
+  nextTick(() => {
+    if (sharedCommentsRef.value) {
+      sharedCommentsRef.value.scrollIntoView({ behavior: 'smooth' })
+    }
+  })
+}
+
+const scrollSharedCommentsToBottom = () => {
+  nextTick(() => {
+    if (sharedCommentsRef.value) {
+      const list = sharedCommentsRef.value.querySelector('.shared-comments-list')
+      if (list) list.scrollTop = list.scrollHeight
+    }
+  })
 }
 </script>
 
@@ -584,6 +876,15 @@ const closeSharedVideo = () => {
   border-radius: 20px;
   overflow: hidden;
 }
+
+.top-back-btn {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 50%;
+  cursor: pointer; transition: background 0.2s;
+  flex-shrink: 0; margin-left: 4px;
+}
+.top-back-btn:hover { background: rgba(255,255,255,0.1); }
 
 .search-input {
   flex: 1;
@@ -1035,23 +1336,186 @@ const closeSharedVideo = () => {
   flex-shrink: 0;
 }
 .share-video-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
-.share-video-label { font-size: 11px; color: #fe2c55; }
-.share-video-title { font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.share-video-label { font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.share-video-desc { font-size: 11px; color: rgba(255,255,255,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* 分享视频播放器 */
+/* 分享视频播放器 — 完整模态体验 */
 .shared-video-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.95); z-index: 2000;
   display: flex; align-items: center; justify-content: center;
 }
-.shared-video-modal {
-  position: relative; width: 90%; max-width: 800px;
+.shared-video-container {
+  position: relative;
+  width: 90%;
+  max-width: 900px;
+  height: 90vh;
+  background: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .shared-video-close {
-  position: absolute; top: -40px; right: 0;
-  width: 36px; height: 36px;
-  background: rgba(255,255,255,0.2); border: none; border-radius: 50%;
-  color: #fff; font-size: 18px; cursor: pointer; z-index: 10;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 100;
+  transition: background 0.2s;
 }
-.shared-video-player { width: 100%; border-radius: 8px; }
+.shared-video-close:hover { background: rgba(255, 255, 255, 0.3); }
+.shared-video-close span { font-size: 13px; }
+
+.shared-video-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.shared-video-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+.shared-video-player {
+  max-width: 100%;
+  max-height: 100%;
+}
+.shared-interaction-section {
+  width: 350px;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+  border-left: 1px solid #333;
+  overflow: hidden;
+}
+.shared-author-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid #333;
+}
+.shared-follow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0; margin: 0;
+  position: relative;
+  width: 50px; height: 50px;
+  flex-shrink: 0;
+}
+.shared-follow-btn img {
+  width: 44px; height: 44px;
+  border-radius: 50%; object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+.shared-follow-btn.followed img { border-color: #fe2c55; }
+.shared-follow-btn svg {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 18px; height: 18px;
+  background: #fe2c55;
+  border-radius: 50%;
+  padding: 3px;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+}
+.shared-author-name {
+  flex: 1;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+}
+.shared-video-info-panel {
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+}
+.shared-video-panel-title {
+  font-size: 14px; font-weight: 500; color: #fff; margin: 0 0 4px;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.shared-video-panel-desc {
+  font-size: 12px; color: rgba(255,255,255,0.5); margin: 0;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+}
+.shared-action-bar {
+  display: flex; gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+}
+.shared-action-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none; border-radius: 20px;
+  color: #fff; font-size: 14px; cursor: pointer;
+  transition: background 0.2s;
+}
+.shared-action-btn:hover { background: rgba(255, 255, 255, 0.2); }
+.shared-action-btn.liked { background: rgba(254, 44, 85, 0.2); }
+
+.shared-comments-section {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+}
+.shared-comments-title {
+  color: #fff; font-size: 14px; font-weight: 500;
+  padding: 10px 16px; margin: 0;
+  border-bottom: 1px solid #333;
+}
+.shared-comments-list {
+  flex: 1; overflow-y: auto; padding: 8px 16px;
+}
+.shared-comment-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 0; border-bottom: 1px solid #2a2a2a;
+}
+.shared-comment-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%; object-fit: cover; flex-shrink: 0;
+}
+.shared-comment-content {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+}
+.shared-comment-author { color: #fff; font-size: 13px; font-weight: 500; }
+.shared-comment-text { color: rgba(255,255,255,0.75); font-size: 12px; }
+.shared-comment-time { color: rgba(255,255,255,0.4); font-size: 11px; flex-shrink: 0; }
+.shared-no-comments { text-align: center; padding: 30px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+
+.shared-comment-input-section {
+  display: flex; gap: 8px;
+  padding: 10px 16px; border-top: 1px solid #333;
+}
+.shared-comment-input {
+  flex: 1;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #333; border-radius: 20px;
+  color: #fff; font-size: 13px; outline: none;
+}
+.shared-comment-input:focus { border-color: #fe2c55; }
+.shared-send-btn {
+  padding: 8px 20px;
+  background: #fe2c55; color: #fff;
+  border: none; border-radius: 20px;
+  font-size: 13px; cursor: pointer;
+}
+.shared-send-btn:hover:not(:disabled) { background: #e0264d; }
+.shared-send-btn:disabled { background: #555; cursor: not-allowed; }
 </style>

@@ -19,9 +19,11 @@ const results = []
 for (let i = 0; i < rawData.length; i++) {
   const v = rawData[i]
   const num = `[${i + 1}/${rawData.length}]`
-  const title = (v.title || '').substring(0, 40)
+  // 标题：保留原始标题，空则置空（不在前端显示"无标题"）
+  const title = (v.title || '').trim().substring(0, 99)
+  const display = title || '(无标题)'
 
-  console.log(`${num} ${title}`)
+  console.log(`${num} ${display}`)
 
   // 上传视频
   const videoFile = path.join(DOWNLOAD_DIR, `${v.videoId}.mp4`)
@@ -64,7 +66,7 @@ for (let i = 0; i < rawData.length; i++) {
     } catch (_) {}
   }
 
-  results.push({ videoId: v.videoId, title: v.title, videoUrl, coverUrl })
+  results.push({ videoId: v.videoId, title: title, videoUrl, coverUrl })
 }
 
 // 保存上传结果
@@ -73,12 +75,13 @@ fs.writeFileSync(uploadResultFile, JSON.stringify(results, null, 2))
 console.log(`\n上传完成! ${results.filter(r => r.videoUrl).length}/${results.length} 成功`)
 console.log(`结果: ${uploadResultFile}`)
 
-// 生成可直接导入的SQL
+// 生成可直接导入的SQL（无标题则不填假标题）
 const sqlLines = ['-- 抖音视频种子数据', 'INSERT INTO works (user_id, type, url, thumbnail, title, description, likes_count, comments_count, views) VALUES']
 const valueLines = results.filter(r => r.videoUrl).map((r, i) => {
   const url = r.videoUrl.replace(/'/g, "\\'")
   const thumb = (r.coverUrl || '').replace(/'/g, "\\'")
   const title = (r.title || '').replace(/'/g, "\\'").substring(0, 99)
+  // description 使用标题内容作为视频文案
   const desc = (r.title || '').replace(/'/g, "\\'").substring(0, 499)
   return `(1, 2, '${url}', '${thumb}', '${title}', '${desc}', ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*10)}, ${Math.floor(Math.random()*500)})`
 })

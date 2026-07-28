@@ -45,6 +45,11 @@ export const getHotWorks = (page = 1, size = 10) => {
   return request.get(`/works/hot?page=${page}&size=${size}`)
 }
 
+// 搜索视频（复用 getWorks 端点，传入 keyword 参数）
+export const searchWorks = (keyword, page = 1, size = 12) => {
+  return request.get(`/works?keyword=${encodeURIComponent(keyword)}&page=${page}&size=${size}`)
+}
+
 // 记录观看历史
 export const recordWatchHistory = (data) => {
   return request.post('/works/watch', data)
