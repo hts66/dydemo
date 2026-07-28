@@ -42,8 +42,9 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     }
 
     @Override
-    public List<Work> getUserWorks(Long userId) {
-        return baseMapper.selectByUserId(userId);
+    public List<Work> getUserWorks(Long userId, int page, int size) {
+        int offset = (page - 1) * size;
+        return baseMapper.selectByUserId(userId, offset, size);
     }
 
     @Override
@@ -110,6 +111,12 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     public List<Work> searchWorks(String keyword, int page, int size) {
         int offset = (page - 1) * size;
         return baseMapper.selectByKeyword(keyword, offset, size);
+    }
+
+    @Override
+    public List<Work> getRandomWorks(int page, int size, int seed) {
+        int offset = (page - 1) * size;
+        return baseMapper.selectRandomWorks(offset, size, seed);
     }
 
     @Override

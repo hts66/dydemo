@@ -25,14 +25,14 @@ import https from 'https'
 const CONFIG = {
   // 抖音用户主页
   douyinUrl:
-    'https://www.douyin.com/user/MS4wLjABAAAAn_QbTPbHT0bUdmlVezIXnhMLK3rW6VI8uEavLNboc20?from_tab_name=main',
+    'https://www.douyin.com/user/MS4wLjABAAAAmGSsa7Is1rtK0qZBtPyq1Yo9NIeLKUOPX48rdmWfHhw?from_tab_name=main',
 
   // 项目后端
   apiBase: 'http://localhost:8080',
-  email: '2703605029@qq.com',
+  email: '2789215635@qq.com',
 
   // 抓取数量
-  maxVideos: 551,
+  maxVideos: 574,
 
   // 下载目录
   downloadDir: path.resolve('./douyin_downloads'),

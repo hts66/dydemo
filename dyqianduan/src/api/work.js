@@ -1,8 +1,10 @@
 import request from '../utils/request'
 
-// 获取视频列表
-export const getWorks = (page = 1, size = 10) => {
-  return request.get(`/works?page=${page}&size=${size}`)
+// 获取视频列表（random=true + seed 实现随机推送，同一 seed 分页一致）
+export const getWorks = (page = 1, size = 10, random = false, seed = 0) => {
+  let url = `/works?page=${page}&size=${size}`
+  if (random) url += `&random=true&seed=${seed}`
+  return request.get(url)
 }
 
 // 获取单个视频
@@ -10,9 +12,9 @@ export const getWorkById = (id) => {
   return request.get(`/works/${id}`)
 }
 
-// 获取用户视频
-export const getUserWorks = (userId) => {
-  return request.get(`/works/user/${userId}`)
+// 获取用户视频（分页）
+export const getUserWorks = (userId, page = 1, size = 12) => {
+  return request.get(`/works/user/${userId}?page=${page}&size=${size}`)
 }
 
 // 发布视频

@@ -213,14 +213,12 @@ const getData = async (refresh = false) => {
 const fetchApi = async (page) => {
   const uid = props.userId || userStore.user?.id || 1
   if (props.apiType === 'friends') {
-    const r = await getFriendsWorks(uid)
-    hasMore.value = false  // 朋友作品不分页
-    return r
+    hasMore.value = false  // 朋友作品不分页，先关掉防止重复请求
+    return await getFriendsWorks(uid)
   }
   if (props.apiType === 'following') {
-    const r = await getFollowingWorks(uid)
-    hasMore.value = false  // 关注作品不分页
-    return r
+    hasMore.value = false  // 关注作品不分页，先关掉防止重复请求
+    return await getFollowingWorks(uid)
   }
   return getRecommendWorks(page, pageSize)
 }
@@ -275,7 +273,7 @@ const loadWorks = async () => {
   }
 }
 
-// Enrich works with like/follow status
+// Enrich works with like/follow status — 并发查询，避免串行卡死
 const enrichWorks = async (data) => {
   const enriched = []
 
@@ -287,21 +285,24 @@ const enrichWorks = async (data) => {
     newWork.createdAt = newWork.createdAt || newWork.created_at
     newWork.isLiked = false
     newWork.isFollowing = false
-
-    if (userStore.isLoggedIn) {
-      try {
-        const [likeResult, followResult] = await Promise.all([
-          checkIsLiked(newWork.id),
-          newWork.userId ? checkIsFollowing(newWork.userId) : Promise.resolve(null)
-        ])
-        if (likeResult && likeResult.code === 200) newWork.isLiked = likeResult.data
-        if (followResult && followResult.code === 200) newWork.isFollowing = followResult.data
-      } catch (_e) {
-        // ignore individual status fetch errors
-      }
-    }
-
     enriched.push(newWork)
+  }
+
+  // 并发查询点赞/关注状态，最多查前 20 个（避免海量请求轰炸后端）
+  if (userStore.isLoggedIn) {
+    const batch = enriched.slice(0, 20)
+    const likeTasks = batch.map(w => checkIsLiked(w.id).catch(() => null))
+    const followTasks = batch.map(w =>
+      w.userId ? checkIsFollowing(w.userId).catch(() => null) : Promise.resolve(null)
+    )
+    const [likeResults, followResults] = await Promise.all([
+      Promise.all(likeTasks),
+      Promise.all(followTasks),
+    ])
+    for (let i = 0; i < batch.length; i++) {
+      if (likeResults[i] && likeResults[i].code === 200) enriched[i].isLiked = likeResults[i].data
+      if (followResults[i] && followResults[i].code === 200) enriched[i].isFollowing = followResults[i].data
+    }
   }
 
   return enriched

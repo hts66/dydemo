@@ -434,7 +434,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getWorks, deleteWork, getUserWorks } from '../api/work'
+import { deleteWork, getUserWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
 import { getLikedWorks, toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { sendMessage } from '../api/message'
@@ -573,7 +573,7 @@ const handleScroll = (event) => {
   const maxHeight = 300
   const newHeight = Math.max(minHeight, maxHeight - scrollTop * 0.5)
   headerHeight.value = newHeight
-  // 触底加载更多（getUserWorks 一次性返回全部作品，无需分页；喜欢列表仍支持分页）
+  // 触底加载更多（作品一次全量、喜欢列表分页）
   if (scrollTop + clientHeight >= scrollHeight - 150) {
     if (activeTab.value === 'liked') loadLikedWorks()
   }
@@ -682,7 +682,8 @@ const loadMyWorks = async (reset = false) => {
   if (worksLoading.value) return
   worksLoading.value = true
   try {
-    const result = await getUserWorks(userStore.user.id)
+    // 自己的作品页不用懒加载，一次性拉取全部
+    const result = await getUserWorks(userStore.user.id, 1, 10000)
     if (result.code === 200) {
       myWorks.value = result.data || []
       worksCount.value = myWorks.value.length

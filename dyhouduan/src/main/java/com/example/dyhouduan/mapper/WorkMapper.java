@@ -21,32 +21,32 @@ public interface WorkMapper extends BaseMapper<Work> {
     @Select("SELECT w.*, u.username, u.avatar " +
             "FROM works w " +
             "LEFT JOIN users u ON w.user_id = u.id " +
+            "ORDER BY RAND(#{seed}) " +
+            "LIMIT #{offset}, #{limit}")
+    List<Work> selectRandomWorks(@Param("offset") int offset,
+                                 @Param("limit") int limit,
+                                 @Param("seed") int seed);
+
+    @Select("SELECT w.*, u.username, u.avatar " +
+            "FROM works w " +
+            "LEFT JOIN users u ON w.user_id = u.id " +
             "ORDER BY (w.likes_count * 0.4 + w.comments_count * 0.3 + w.views * 0.2) DESC, w.created_at DESC " +
             "LIMIT #{offset}, #{limit}")
     List<Work> selectHotWorks(@Param("offset") int offset, @Param("limit") int limit);
 
     /**
-     * 个性化推荐：排除自己的作品和已看过的作品，
-     * 按热度打分，并对“关注作者/曾点赞过的作者”给予加权，近 7 天新作再加成。
+     * 个性化推荐：排除自己的作品，优先推荐新作和关注作者。
+     * 不再按观看历史过滤（避免新视频划过一次就永久消失）。
      */
-    @Select("SELECT w.*, u.username, u.avatar, " +
-            "  (w.likes_count * 0.4 + w.comments_count * 0.3 + w.views * 0.2 " +
-            "   + CASE WHEN w.user_id IN ( " +
-            "       SELECT following_id FROM follows WHERE follower_id = #{userId} " +
-            "     ) THEN 100 ELSE 0 END " +
-            "   + CASE WHEN w.user_id IN ( " +
-            "       SELECT DISTINCT wk.user_id FROM likes l JOIN works wk ON l.work_id = wk.id " +
-            "       WHERE l.user_id = #{userId} " +
-            "     ) THEN 50 ELSE 0 END " +
-            "   + CASE WHEN w.created_at > DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 20 ELSE 0 END " +
-            "  ) AS recommend_score " +
+    @Select("SELECT w.*, u.username, u.avatar " +
             "FROM works w " +
             "LEFT JOIN users u ON w.user_id = u.id " +
             "WHERE w.user_id != #{userId} " +
-            "  AND w.id NOT IN ( " +
-            "    SELECT work_id FROM watch_history WHERE user_id = #{userId} " +
-            "  ) " +
-            "ORDER BY recommend_score DESC, w.created_at DESC " +
+            "ORDER BY " +
+            "  CASE WHEN w.created_at > DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END DESC, " +
+            "  CASE WHEN w.user_id IN (SELECT following_id FROM follows WHERE follower_id = #{userId}) THEN 1 ELSE 0 END DESC, " +
+            "  (w.likes_count + w.comments_count * 2 + w.views * 0.1) DESC, " +
+            "  w.created_at DESC " +
             "LIMIT #{offset}, #{limit}")
     List<Work> selectRecommendWorks(@Param("userId") Long userId,
                                     @Param("offset") int offset,
@@ -56,8 +56,11 @@ public interface WorkMapper extends BaseMapper<Work> {
             "FROM works w " +
             "LEFT JOIN users u ON w.user_id = u.id " +
             "WHERE w.user_id = #{userId} " +
-            "ORDER BY w.created_at DESC")
-    List<Work> selectByUserId(@Param("userId") Long userId);
+            "ORDER BY w.created_at DESC " +
+            "LIMIT #{offset}, #{limit}")
+    List<Work> selectByUserId(@Param("userId") Long userId,
+                              @Param("offset") int offset,
+                              @Param("limit") int limit);
 
     @Select("<script>" +
             "SELECT w.*, u.username, u.avatar " +

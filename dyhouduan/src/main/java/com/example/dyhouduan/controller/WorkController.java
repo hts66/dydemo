@@ -44,13 +44,15 @@ public class WorkController {
     public Response<List<Work>> getWorks(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "false") boolean random,
+            @RequestParam(defaultValue = "0") int seed) {
         try {
-            log.info("getWorks 请求: page={}, size={}, keyword=[{}]", page, size, keyword);
             List<Work> works;
             if (keyword != null && !keyword.trim().isEmpty()) {
-                log.info("进入搜索模式, keyword={}", keyword.trim());
                 works = workService.searchWorks(keyword.trim(), page, size);
+            } else if (random) {
+                works = workService.getRandomWorks(page, size, seed);
             } else {
                 works = workService.getWorksWithUser(page, size);
             }
@@ -82,9 +84,11 @@ public class WorkController {
      * 获取用户视频列表
      */
     @GetMapping("/user/{userId}")
-    public Response<List<Work>> getUserWorks(@PathVariable Long userId) {
+    public Response<List<Work>> getUserWorks(@PathVariable Long userId,
+                                              @RequestParam(defaultValue = "1") int page,
+                                              @RequestParam(defaultValue = "12") int size) {
         try {
-            List<Work> works = workService.getUserWorks(userId);
+            List<Work> works = workService.getUserWorks(userId, page, size);
             return Response.success(works);
         } catch (Exception e) {
             log.error("获取用户视频失败", e);

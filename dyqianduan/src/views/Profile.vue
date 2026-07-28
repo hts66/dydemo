@@ -218,7 +218,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getWorks, getUserWorks } from '../api/work'
+import { getUserWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
 import { getUserById, updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
 
@@ -391,7 +391,10 @@ const handleScroll = (event) => {
   const maxHeight = 300
   const newHeight = Math.max(minHeight, maxHeight - scrollTop * 0.5)
   headerHeight.value = newHeight
-  // getUserWorks 一次性返回该用户全部作品，触底无需分页加载
+  // 触底加载更多作品
+  if (activeTab.value === 'works' && scrollTop + clientHeight >= scrollHeight - 150) {
+    loadWorks()
+  }
 }
 
 const loadUserProfile = async () => {
@@ -435,11 +438,22 @@ const loadUserProfile = async () => {
 const loadWorks = async (reset = false) => {
   if (!targetUser.value) return
   if (worksLoading.value) return
+  if (reset) {
+    worksPage.value = 1
+    worksHasMore.value = true
+    targetWorks.value = []
+  }
+  if (!worksHasMore.value) return
   worksLoading.value = true
   try {
-    const result = await getUserWorks(targetUser.value.id)
+    const result = await getUserWorks(targetUser.value.id, worksPage.value, 12)
     if (result.code === 200) {
-      targetWorks.value = result.data || []
+      if (result.data.length === 0) {
+        worksHasMore.value = false
+      } else {
+        targetWorks.value.push(...result.data)
+        worksPage.value++
+      }
       worksCount.value = targetWorks.value.reduce((sum, w) => sum + (w.likesCount || 0), 0)
     }
   } catch (err) {

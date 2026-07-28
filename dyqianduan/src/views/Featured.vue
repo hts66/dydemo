@@ -210,10 +210,11 @@ const commentInput = ref('')
 const videoPlayer = ref(null)
 const commentsSection = ref(null)
 
-// 分页懒加载
+// 分页懒加载 + 随机种子（保证同一次会话分页顺序一致）
 const page = ref(1)
 const hasMore = ref(true)
 const loading = ref(false)
+const randomSeed = ref(Math.floor(Math.random() * 2147483647))
 
 // 分享相关
 const showSharePopup = ref(false)
@@ -256,11 +257,12 @@ const loadWorks = async (reset = false) => {
     page.value = 1
     hasMore.value = true
     works.value = []
+    randomSeed.value = Math.floor(Math.random() * 2147483647)
   }
   if (!hasMore.value) return
   loading.value = true
   try {
-    const result = await getWorks(page.value, 12)
+    const result = await getWorks(page.value, 12, true, randomSeed.value)
     if (result.code === 200) {
       if (result.data.length === 0) {
         hasMore.value = false

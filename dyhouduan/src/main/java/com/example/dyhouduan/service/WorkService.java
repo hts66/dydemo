@@ -9,7 +9,7 @@ public interface WorkService extends IService<Work> {
 
     List<Work> getWorksWithUser(int page, int size);
 
-    List<Work> getUserWorks(Long userId);
+    List<Work> getUserWorks(Long userId, int page, int size);
 
     List<Work> getWorksByUserIds(List<Long> userIds);
 
@@ -26,4 +26,6 @@ public interface WorkService extends IService<Work> {
     int batchPublishWorks(Long userId, List<Work> works);
 
     List<Work> searchWorks(String keyword, int page, int size);
+
+    List<Work> getRandomWorks(int page, int size, int seed);
 }
