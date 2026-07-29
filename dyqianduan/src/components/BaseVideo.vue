@@ -7,10 +7,11 @@
 
     <!-- Thumbnail placeholder -->
     <img
-      v-if="!loaded && thumbnail"
-      :src="thumbnail"
+      v-if="!loaded && thumbnailSrc"
+      :src="thumbnailSrc"
       class="video-placeholder"
       alt=""
+      @error="onThumbnailError"
     />
 
     <!-- Video element -->
@@ -118,9 +119,33 @@ const videoSrc = computed(() => {
   }
   return url
 })
-const thumbnail = computed(() => {
-  return props.item?.thumbnail || props.item?.url?.replace('/videos/', '/images/').replace('.mp4', '.jpg') || ''
+const thumbnailError = ref(false)
+
+const thumbnailSrc = computed(() => {
+  if (thumbnailError.value) return ''
+  const thumb = props.item?.thumbnail
+  if (thumb) {
+    // 外部URL走代理，避免CORS/跨域问题
+    if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
+      return `/api/video/proxy?url=${encodeURIComponent(thumb)}`
+    }
+    return thumb
+  }
+  // 回退：尝试从视频URL推导封面URL
+  const url = props.item?.url || ''
+  if (url) {
+    const derived = url.replace('/videos/', '/images/').replace('.mp4', '.jpg')
+    if (derived !== url) return derived
+  }
+  return ''
 })
+
+const onThumbnailError = (e) => {
+  if (thumbnailError.value) return
+  thumbnailError.value = true
+  // 最后回退到SVG占位图
+  e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22711%22 viewBox=%220 0 400 711%22%3E%3Crect fill=%22%231a1a1a%22 width=%22400%22 height=%22711%22/%3E%3Ctext fill=%22%23555%22 font-family=%22sans-serif%22 font-size=%2216%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22%3E暂无封面%3C/text%3E%3C/svg%3E'
+}
 
 const progressPercent = computed(() => {
   if (duration.value <= 0) return 0
@@ -221,6 +246,7 @@ const stop = () => {
     duration.value = 0
     isMuted.value = false  // 重置静音状态，下次播放时重新尝试非静音
     autoplayBlocked.value = false
+    thumbnailError.value = false  // 重置封面错误状态，下次可以重试
   }
 }
 
@@ -387,6 +413,7 @@ watch(() => props.isPlay, (newVal) => {
 })
 
 watch(videoSrc, (newSrc) => {
+  thumbnailError.value = false  // 新视频源，重置封面错误状态
   if (newSrc && videoRef.value) {
     videoRef.value.src = newSrc
     if (props.isPlay) {

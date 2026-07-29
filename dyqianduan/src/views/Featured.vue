@@ -241,7 +241,7 @@ const shareToFriend = async (friend) => {
   if (!currentVideo.value) return
   const title = currentVideo.value.title || '无标题'
   const description = currentVideo.value.description || ''
-  const content = `📹 [分享视频] ${currentVideo.value.id}\n${title}\n${description}\n${currentVideo.value.url}`
+  const content = `📹 [分享视频] ${currentVideo.value.id}\n${title}\n${description}\n${currentVideo.value.url}\n${currentVideo.value.thumbnail || ''}`
   try {
     await sendMessage(friend.id, content)
     shareSuccess.value = true

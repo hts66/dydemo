@@ -177,10 +177,32 @@
             >
               <img :src="msg.senderId === userStore.user?.id ? (userStore.user?.avatar || defaultAvatar) : (msg.senderAvatar || defaultAvatar)" class="msg-avatar" />
               <div class="msg-content">
-                <template v-if="isShareMsg(msg.content)">
+                <template v-if="msg.isRecommend">
+                  <div class="recommend-text">{{ msg.content.text }}</div>
+                  <div class="recommend-video-list">
+                    <div
+                      v-for="video in msg.recommendVideos"
+                      :key="video.id"
+                      class="recommend-video-card"
+                      @click.stop="playRecommendVideo(video)"
+                    >
+                      <div class="recommend-video-thumb">
+                        <img :src="proxyThumb(video.thumbnail)" alt="" @error="e => e.target.style.display='none'" />
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                      </div>
+                      <div class="recommend-video-info">
+                        <span class="recommend-video-title">{{ video.title || '无标题' }}</span>
+                        <span class="recommend-video-author">@{{ video.username || '匿名用户' }}</span>
+                        <span class="recommend-video-tags" v-if="video.tags">{{ video.tags.slice(0,5).join(' · ') }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <template v-else-if="isShareMsg(msg.content)">
                   <div class="share-video-card" @click.stop="playSharedVideo(msg.content)">
                     <div class="share-video-thumb">
-                      <svg viewBox="0 0 24 24" width="36" height="36" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                      <img v-if="getShareThumbnail(msg.content)" :src="getShareThumbnail(msg.content)" class="share-video-cover" alt="" />
+                      <svg class="share-video-play-icon" viewBox="0 0 24 24" width="28" height="28" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
                     </div>
                     <div class="share-video-info">
                       <span class="share-video-label">{{ getShareTitle(msg.content) }}</span>
@@ -227,6 +249,7 @@
           <div class="shared-video-section">
             <video
               :src="sharedVideoUrl"
+              :poster="sharedVideoPoster"
               class="shared-video-player"
               controls
               autoplay
@@ -487,17 +510,21 @@ const sendChatMessage = async () => {
       }
       const botResult = await request.post('/chat/bot', { messages: history })
       if (botResult.code === 200) {
+        const isRecommend = botResult.data && botResult.data.type === 'recommend'
         const botMsg = {
           id: Date.now() + 1,
-          content: botResult.data,
+          content: isRecommend ? botResult.data : botResult.data,
           senderId: AI_BOT.id,
           senderUsername: AI_BOT.username,
           senderAvatar: AI_BOT.avatar,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          isRecommend: isRecommend,
+          recommendVideos: isRecommend ? botResult.data.videos : null
         }
         chatMessages.value.push(botMsg)
-        // 后台持久化AI回复
-        saveBotMessage(botResult.data).catch(() => {})
+        // 后台持久化AI回复（推荐类消息存文本部分）
+        const saveContent = isRecommend ? botResult.data.text : botResult.data
+        saveBotMessage(saveContent).catch(() => {})
         await nextTick()
         scrollToBottom()
       }
@@ -529,33 +556,56 @@ const formatMsgTime = (dateStr) => {
 const sharedVideoUrl = ref('')
 const showSharedVideo = ref(false)
 const sharedVideoData = ref(null)  // 完整的作品数据
+const sharedVideoPoster = computed(() => {
+  const thumb = sharedVideoData.value?.thumbnail
+  if (thumb) {
+    if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
+      return `/api/video/proxy?url=${encodeURIComponent(thumb)}`
+    }
+    return thumb
+  }
+  return ''
+})
 
 const isShareMsg = (content) => content && content.startsWith('📹 [分享视频]')
 
-// 解析分享消息：兼容新旧格式
+// 解析分享消息：兼容多代格式
 // 旧格式(2行): 📹 [分享视频] {title}\n{url}
 // 新格式(4行): 📹 [分享视频] {id}\n{title}\n{description}\n{url}
+// 最新格式(5行): 📹 [分享视频] {id}\n{title}\n{description}\n{url}\n{thumbnail}
 const parseShareMsg = (content) => {
   const lines = content.split('\n')
   const prefix = '📹 [分享视频] '
   const firstPart = lines[0]?.replace(prefix, '') || ''
 
-  if (lines.length >= 4) {
-    // 新格式：id, title, description, url
+  if (lines.length >= 5) {
+    // 最新格式(5行): id, title, description, url, thumbnail
     return {
       workId: firstPart,
       title: lines[1] || '无标题',
       description: lines[2] || '',
       url: lines[3] || '',
+      thumbnail: lines[4] || '',
+      isNewFormat: true
+    }
+  } else if (lines.length >= 4) {
+    // 新格式(4行): id, title, description, url
+    return {
+      workId: firstPart,
+      title: lines[1] || '无标题',
+      description: lines[2] || '',
+      url: lines[3] || '',
+      thumbnail: '',
       isNewFormat: true
     }
   } else {
-    // 旧格式：title, url
+    // 旧格式(2行): title, url
     return {
       workId: null,
       title: firstPart || '无标题',
       description: '',
       url: lines[1] || '',
+      thumbnail: '',
       isNewFormat: false
     }
   }
@@ -566,6 +616,18 @@ const getShareDescription = (content) => parseShareMsg(content).description
 const getShareUrl = (content) => parseShareMsg(content).url
 const getShareWorkId = (content) => parseShareMsg(content).workId
 
+// 获取分享视频的封面URL（外部URL走代理）
+const getShareThumbnail = (content) => {
+  const thumb = parseShareMsg(content).thumbnail
+  if (thumb) {
+    if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
+      return `/api/video/proxy?url=${encodeURIComponent(thumb)}`
+    }
+    return thumb
+  }
+  return ''
+}
+
 // 从后端获取完整作品数据
 const fetchVideoDetail = async (workId) => {
   if (!workId) return null
@@ -574,6 +636,64 @@ const fetchVideoDetail = async (workId) => {
     if (result.code === 200) return result.data
   } catch (_) {}
   return null
+}
+
+// 点击推荐视频卡片播放
+const playRecommendVideo = async (video) => {
+  if (!video.url) return
+
+  sharedVideoUrl.value = video.url.startsWith('http')
+    ? `/api/video/proxy?url=${encodeURIComponent(video.url)}`
+    : video.url
+
+  sharedVideoData.value = {
+    id: video.id,
+    title: video.title,
+    description: video.description || '',
+    url: video.url,
+    thumbnail: video.thumbnail || '',
+    username: video.username || '匿名用户',
+    isLiked: false,
+    isFollowing: false
+  }
+  sharedVideoComments.value = []
+
+  if (userStore.isLoggedIn && video.id) {
+    try {
+      const workData = await fetchVideoDetail(video.id)
+      if (workData) {
+        workData.isLiked = false
+        workData.isFollowing = false
+        const [likeResult, followResult] = await Promise.all([
+          checkIsLiked(workData.id),
+          workData.userId ? checkIsFollowing(workData.userId) : Promise.resolve({ code: 200, data: false })
+        ])
+        if (likeResult.code === 200) workData.isLiked = likeResult.data
+        if (followResult.code === 200) workData.isFollowing = followResult.data
+        sharedVideoData.value = { ...sharedVideoData.value, ...workData }
+      }
+    } catch (_) {}
+  }
+
+  // 加载评论
+  if (video.id) {
+    try {
+      const cr = await getComments(video.id)
+      if (cr.code === 200) sharedVideoComments.value = cr.data
+    } catch (_) {}
+  }
+
+  showSharedVideo.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+// 封面图代理
+const proxyThumb = (url) => {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return `/api/video/proxy?url=${encodeURIComponent(url)}`
+  }
+  return url
 }
 
 const playSharedVideo = async (content) => {
@@ -1315,6 +1435,71 @@ const scrollSharedCommentsToBottom = () => {
   min-height: 0;
 }
 
+/* AI推荐视频列表 */
+.recommend-text {
+  font-size: 13px;
+  color: #ccc;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.recommend-video-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.recommend-video-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  max-width: 300px;
+}
+.recommend-video-card:hover { background: #3a3a3a; }
+.recommend-video-thumb {
+  width: 80px; height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  background: #1a1a1a;
+}
+.recommend-video-thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.recommend-video-thumb svg {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+}
+.recommend-video-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+.recommend-video-title {
+  font-size: 13px; color: #fff;
+  font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.recommend-video-author {
+  font-size: 11px; color: rgba(255,255,255,0.5);
+}
+.recommend-video-tags {
+  font-size: 10px;
+  color: #fe2c55;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* 分享视频卡片 */
 .share-video-card {
   display: flex;
@@ -1334,6 +1519,22 @@ const scrollSharedCommentsToBottom = () => {
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.share-video-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  z-index: 0;
+}
+.share-video-play-icon {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
 }
 .share-video-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
 .share-video-label { font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }

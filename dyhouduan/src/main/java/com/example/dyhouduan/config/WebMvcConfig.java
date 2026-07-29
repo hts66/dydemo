@@ -54,6 +54,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/api/upload/**",
                     "/api/chat/**",
                     "/api/messages/**",
+                    "/api/vector/**",
                     "/error"
                 );
     }

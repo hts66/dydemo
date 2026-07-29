@@ -1,6 +1,7 @@
 /**
  * 批量上传已下载的抖音视频到 MinIO 并发布
- * 用法: node upload_douyin.mjs
+ * 用法: node upload_douyin.mjs [userId]
+ *   userId: 发布者用户ID，默认为 13
  */
 import fs from 'fs'
 import path from 'path'
@@ -9,6 +10,7 @@ import { execSync } from 'child_process'
 const DOWNLOAD_DIR = './douyin_downloads'
 const API = 'http://localhost:8080'
 const EMAIL = '2703605029@qq.com'
+const USER_ID = parseInt(process.argv[2]) || 13
 
 // 读取视频元数据
 const rawData = JSON.parse(fs.readFileSync(path.join(DOWNLOAD_DIR, 'video_data.json'), 'utf-8'))
@@ -83,7 +85,7 @@ const valueLines = results.filter(r => r.videoUrl).map((r, i) => {
   const title = (r.title || '').replace(/'/g, "\\'").substring(0, 99)
   // description 使用标题内容作为视频文案
   const desc = (r.title || '').replace(/'/g, "\\'").substring(0, 499)
-  return `(1, 2, '${url}', '${thumb}', '${title}', '${desc}', ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*10)}, ${Math.floor(Math.random()*500)})`
+  return `(${USER_ID}, 2, '${url}', '${thumb}', '${title}', '${desc}', ${Math.floor(Math.random()*50)}, ${Math.floor(Math.random()*10)}, ${Math.floor(Math.random()*500)})`
 })
 sqlLines.push(valueLines.join(',\n') + ';')
 

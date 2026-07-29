@@ -25,7 +25,7 @@ import https from 'https'
 const CONFIG = {
   // 抖音用户主页
   douyinUrl:
-    'https://www.douyin.com/user/MS4wLjABAAAAmGSsa7Is1rtK0qZBtPyq1Yo9NIeLKUOPX48rdmWfHhw?from_tab_name=main',
+    'https://www.douyin.com/user/MS4wLjABAAAAY43LedBfPVtqljJwaaV3cBLPqghxO5xgHYftvQqONhi-2a3ENH7NhWzQoKM2XGsk?from_tab_name=main&vid=7523924914492788008',
 
   // 项目后端
   apiBase: 'http://localhost:8080',

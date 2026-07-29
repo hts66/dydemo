@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # ===================== 向量数据库 =====================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: dydemo-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - C:/Users/27036/qdrant_data:/qdrant/storage
+    environment:
+      # 日志级别（debug / info / warn / error）
+      - QDRANT__LOG_LEVEL=info
+      # API key — 生产环境请改为强密码
+      - QDRANT__SERVICE__API_KEY=dyqdrant2024
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:6333/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===================== 对象存储 =====================
+  minio:
+    image: minio/minio:latest
+    container_name: dydemo-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    volumes:
+      - minio_data:/data
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=Minio@123456
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===================== 缓存 =====================
+  redis:
+    image: redis:7-alpine
+    container_name: dydemo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ===================== 数据库 =====================
+  # (MySQL 已在宿主机运行，此处注释掉。如需容器化请取消注释)
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: dydemo-mysql
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=root123
+  #     - MYSQL_DATABASE=dy
+  #     - MYSQL_USER=hts
+  #     - MYSQL_PASSWORD=HTshun666!
+  #   command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+  #   healthcheck:
+  #     test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  qdrant_data:
+  minio_data:
+  redis_data:
+  # mysql_data:
