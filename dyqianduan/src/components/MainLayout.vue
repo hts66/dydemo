@@ -110,7 +110,11 @@
 
       <!-- 页面内容 -->
       <div class="page-content">
-        <router-view :key="$route.fullPath" />
+        <router-view v-slot="{ Component }">
+          <keep-alive>
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </div>
     </main>
 
@@ -508,7 +512,7 @@ const sendChatMessage = async () => {
           history.push({ role: 'user', content: msg.content })
         }
       }
-      const botResult = await request.post('/chat/bot', { messages: history })
+      const botResult = await request.post('/chat/agent', { messages: history })
       if (botResult.code === 200) {
         const isRecommend = botResult.data && botResult.data.type === 'recommend'
         const botMsg = {
@@ -1543,7 +1547,7 @@ const scrollSharedCommentsToBottom = () => {
 /* 分享视频播放器 — 完整模态体验 */
 .shared-video-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.95); z-index: 2000;
+  background: rgba(0,0,0,0.95); z-index: 1000002;
   display: flex; align-items: center; justify-content: center;
 }
 .shared-video-container {
