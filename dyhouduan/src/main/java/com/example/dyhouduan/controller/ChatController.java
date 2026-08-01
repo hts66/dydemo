@@ -43,6 +43,7 @@ public class ChatController {
         this.videoRecommendService = videoRecommendService;
         this.objectMapper = new ObjectMapper();
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
     }
@@ -126,10 +127,14 @@ public class ChatController {
                 var agentResult = objectMapper.readTree(response.body());
                 String type = agentResult.has("type") ? agentResult.get("type").asText() : "chat";
                 String text = agentResult.has("text") ? agentResult.get("text").asText() : "";
+                String threadId = agentResult.has("thread_id") ? agentResult.get("thread_id").asText() : "";
 
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("type", type);
                 data.put("text", text);
+                if (!threadId.isEmpty()) {
+                    data.put("thread_id", threadId);
+                }
 
                 if (agentResult.has("videos") && !agentResult.get("videos").isEmpty()) {
                     data.put("videos", objectMapper.convertValue(
@@ -146,6 +151,37 @@ public class ChatController {
             log.error("Agent 服务调用失败，降级到旧逻辑: {}", e.getMessage());
             // 降级到旧逻辑
             return handleWithFallback(request);
+        }
+    }
+
+    /** ===================== 重置会话端点 ===================== */
+    @PostMapping("/agent/reset")
+    public Response<Object> resetAgentChat(@RequestBody Map<String, Object> request) {
+        try {
+            String agentUrl = agentApiUrl + "/chat/reset";
+            String jsonBody = objectMapper.writeValueAsString(request);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(agentUrl))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .timeout(Duration.ofSeconds(30))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(httpRequest,
+                    HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                var result = objectMapper.readTree(response.body());
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("new_thread_id", result.get("new_thread_id").asText());
+                return Response.success(data);
+            } else {
+                return Response.error("重置会话失败");
+            }
+        } catch (Exception e) {
+            log.error("重置Agent会话失败: {}", e.getMessage());
+            return Response.error("重置会话失败: " + e.getMessage());
         }
     }
 

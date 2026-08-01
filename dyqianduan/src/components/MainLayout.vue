@@ -162,11 +162,19 @@
             <img :src="currentChatFriend?.avatar || defaultAvatar" />
             <span class="chat-username">{{ currentChatFriend?.username }}</span>
           </div>
-          <button class="chat-more-btn">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="#888">
-              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-            </svg>
-          </button>
+          <div class="chat-header-actions">
+            <button
+              v-if="currentChatFriend?.id === AI_BOT.id"
+              class="chat-reset-btn"
+              @click="resetAiChat"
+              title="开始新对话"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="#888">
+                <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <span>新对话</span>
+            </button>
+          </div>
         </div>
         <div class="chat-messages" ref="chatMessagesRef">
           <div v-if="!currentChatFriend" class="no-chat-selected">
@@ -376,6 +384,7 @@ const currentChatFriend = ref(null)
 const chatMessages = ref([])
 const chatInput = ref('')
 const chatMessagesRef = ref(null)
+const threadId = ref('')  // AI 对话会话ID，用于持续对话
 
 const goToFriends = () => {
   console.log('朋友按钮被点击了')
@@ -408,6 +417,7 @@ const openAiChat = async () => {
 
   if (!wasAiChat) {
     chatMessages.value = []
+    threadId.value = ''  // 新会话，重置 thread_id
     // 从数据库加载AI聊天历史
     if (userStore.user?.id) {
       try {
@@ -503,21 +513,34 @@ const sendChatMessage = async () => {
       // 后台持久化用户消息（不阻塞UI）
       sendMessage(AI_BOT.id, message).catch(() => {})
 
-      // 构建对话历史
-      const history = []
+      // 构建要发送的消息列表 — 始终发送完整对话历史以确保上下文完整
+      const messagesToSend = []
       for (const msg of chatMessages.value) {
         if (msg.senderId === AI_BOT.id) {
-          history.push({ role: 'assistant', content: msg.content })
+          messagesToSend.push({ role: 'assistant', content: msg.content })
         } else if (msg.senderId === userStore.user.id) {
-          history.push({ role: 'user', content: msg.content })
+          messagesToSend.push({ role: 'user', content: msg.content })
         }
       }
-      const botResult = await request.post('/chat/agent', { messages: history })
+
+      const requestBody = { messages: messagesToSend }
+      if (threadId.value) {
+        requestBody.thread_id = threadId.value
+      }
+
+      const botResult = await request.post('/chat/agent', requestBody)
       if (botResult.code === 200) {
         const isRecommend = botResult.data && botResult.data.type === 'recommend'
+        const replyText = botResult.data.text || ''
+
+        // 保存 thread_id 用于后续持续对话
+        if (botResult.data.thread_id) {
+          threadId.value = botResult.data.thread_id
+        }
+
         const botMsg = {
           id: Date.now() + 1,
-          content: isRecommend ? botResult.data : botResult.data,
+          content: replyText,
           senderId: AI_BOT.id,
           senderUsername: AI_BOT.username,
           senderAvatar: AI_BOT.avatar,
@@ -526,9 +549,8 @@ const sendChatMessage = async () => {
           recommendVideos: isRecommend ? botResult.data.videos : null
         }
         chatMessages.value.push(botMsg)
-        // 后台持久化AI回复（推荐类消息存文本部分）
-        const saveContent = isRecommend ? botResult.data.text : botResult.data
-        saveBotMessage(saveContent).catch(() => {})
+        // 后台持久化AI回复（推荐类消息只存文本部分）
+        saveBotMessage(replyText).catch(() => {})
         await nextTick()
         scrollToBottom()
       }
@@ -540,6 +562,17 @@ const sendChatMessage = async () => {
   } catch (err) {
     console.error('发送消息失败', err)
   }
+}
+
+// 重置AI对话（开始新话题）
+const resetAiChat = async () => {
+  if (threadId.value) {
+    try {
+      await request.post('/chat/agent/reset', { thread_id: threadId.value })
+    } catch (_) {}
+  }
+  threadId.value = ''
+  chatMessages.value = []
 }
 
 const scrollToBottom = () => {
@@ -1272,6 +1305,36 @@ const scrollSharedCommentsToBottom = () => {
 .chat-more-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 50%;
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-reset-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 14px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-reset-btn:hover {
+  background: rgba(254, 44, 85, 0.15);
+  border-color: #fe2c55;
+  color: #fe2c55;
+}
+
+.chat-reset-btn:hover svg {
+  fill: #fe2c55;
 }
 
 .close-chat-btn {

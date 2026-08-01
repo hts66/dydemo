@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 async def recommend_videos(query: str, limit: int = 5) -> str:
     """
     根据用户的自然语言描述推荐视频。当用户说"推荐XX视频"、"给我找XX"、"有没有XX"等时调用此工具。
-    内部会先用AI提取标签，再通过向量搜索匹配最相似的视频。
+    内部会先用AI提取标签，再通过向量搜索匹配最相似的视频。向量搜索无结果时自动降级为关键词搜索。
 
     Args:
         query: 用户的原始查询语句，例如"推荐御姐黑丝长腿视频"
@@ -30,36 +30,18 @@ async def recommend_videos(query: str, limit: int = 5) -> str:
     try:
         # 1. 用 DeepSeek 提取标签
         tags = await _extract_tags(query)
-        if not tags:
-            return json.dumps({
-                "found": False,
-                "message": '抱歉，我没太理解你想看什么类型的视频，可以再说具体一点吗？比如"推荐御姐黑丝视频"~',
-                "videos": []
-            }, ensure_ascii=False)
-
         log.info(f"标签提取: '{query}' → {tags}")
 
-        # 2. 构建向量
-        vector = build_vector(tags)
-        if all(v == 0.0 for v in vector):
-            return json.dumps({
-                "found": False,
-                "message": "抱歉，我暂时没有收录这类视频的标签，换个类型试试？",
-                "videos": []
-            }, ensure_ascii=False)
+        # 2. 尝试向量搜索
+        vector_results = []
+        if tags:
+            vector = build_vector(tags)
+            if not all(v == 0.0 for v in vector):
+                vector_results = await qdrant_client.search_similar(vector, limit)
 
-        # 3. 搜索 Qdrant
-        results = await qdrant_client.search_similar(vector, limit)
-        if not results:
-            return json.dumps({
-                "found": False,
-                "message": f"没有找到匹配'{', '.join(tags)}'的视频，换个关键词试试吧~",
-                "videos": []
-            }, ensure_ascii=False)
-
-        # 4. 格式化为 JSON 返回给 LLM
+        # 3. 格式化向量搜索结果
         videos = []
-        for r in results:
+        for r in vector_results:
             payload = r.get("payload", {})
             videos.append({
                 "id": r["id"],
@@ -69,7 +51,25 @@ async def recommend_videos(query: str, limit: int = 5) -> str:
                 "tags": payload.get("tags", []),
             })
 
-        tag_str = "、".join(tags)
+        # 4. 向量搜索无结果 → 自动降级为关键词搜索
+        if not videos:
+            log.info(f"向量搜索无结果，降级为关键词搜索: '{query}'")
+            keyword_videos = await _keyword_search(query, limit)
+            if keyword_videos:
+                return json.dumps({
+                    "found": True,
+                    "message": f"为你找到了 {len(keyword_videos)} 个与「{query}」相关的视频，快来看看吧~ 🎬",
+                    "videos": keyword_videos,
+                }, ensure_ascii=False)
+            else:
+                return json.dumps({
+                    "found": False,
+                    "message": f"没有找到与「{query}」相关的视频，换个关键词试试吧~",
+                    "videos": []
+                }, ensure_ascii=False)
+
+        # 5. 向量搜索有结果
+        tag_str = "、".join(tags) if tags else query
         message = f"为你找到了 {len(videos)} 个「{tag_str}」视频，快来看看吧~ 🎬"
 
         return json.dumps({
@@ -194,13 +194,17 @@ async def _extract_tags(user_query: str) -> List[str]:
 标签列表:
 {all_tags_for_prompt()}
 
-规则:
+重要规则:
 - 用户可能说"推荐XX视频"、"给我XX的"、"有没有XX"等
-- 从标签列表中选择所有符合的标签(大类+子类都要选)
-- 如果用户明确说了属性(如"黑丝")，一定要选上
+- 首先判断用户想要哪个大类视频(美女/小猫/风景)，必须选一个大类
+- 如果用户明确说了属性(如"黑丝"、"橘猫"、"日落")，一定要选上对应的子标签
 - 如果用户没提的属性不要选
-- 只返回JSON数组,如: ["美女","黑丝","长腿"]
-- 如果用户没提任何具体类型，根据常见理解选择最合理的分类
+- **关键: 如果用户提到的概念在标签列表中完全找不到对应类别，返回空数组[]**
+- 例如"推荐赛车视频"→赛车不在任何标签中→返回[]
+- 例如"推荐游戏视频"→游戏不在任何标签中→返回[]
+- 只返回JSON数组,如: ["美女","黑丝","长腿"] 或 ["小猫","橘猫","玩耍"] 或 ["风景","日落","海景"]
+- 数组第一项必须是大类标签(美女/小猫/风景)
+- 不要返回任何解释文字
 
 用户查询: {user_query}
 
@@ -240,4 +244,35 @@ JSON数组:"""
 
     except Exception as e:
         log.warning(f"标签提取失败: {e}")
+        return []
+
+
+async def _keyword_search(keyword: str, limit: int = 5) -> list:
+    """关键词搜索（MySQL LIKE），作为向量搜索的降级方案"""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{settings.SPRING_BOOT_API_URL}/api/works",
+                params={"keyword": keyword, "page": 1, "size": limit},
+            )
+            if resp.status_code != 200:
+                return []
+
+            data = resp.json()
+            if data.get("code") != 200:
+                return []
+
+            works = data["data"].get("records", [])
+            return [
+                {
+                    "id": w["id"],
+                    "score": 0.0,
+                    "title": w.get("title", ""),
+                    "description": w.get("description", ""),
+                    "tags": [],
+                }
+                for w in works
+            ]
+    except Exception as e:
+        log.error(f"关键词搜索降级失败: {e}")
         return []

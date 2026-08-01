@@ -181,6 +181,34 @@ public class QdrantService {
         return ids;
     }
 
+    /** 获取单个 point 的向量 */
+    public float[] getPointVector(Long workId) {
+        try {
+            String url = config.getBaseUrl() + "/collections/" + COLLECTION_VIDEO_TAGS + "/points/" + workId;
+            HttpRequest req = apiRequest(url).GET().build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+
+            if (resp.statusCode() == 200) {
+                var root = mapper.readTree(resp.body());
+                var result = root.get("result");
+                if (result != null && result.has("vector")) {
+                    var vecNode = result.get("vector");
+                    float[] vec = new float[TagVocabulary.VECTOR_SIZE];
+                    if (vecNode.isArray()) {
+                        for (int i = 0; i < Math.min(vecNode.size(), vec.length); i++) {
+                            vec[i] = vecNode.get(i).floatValue();
+                        }
+                    }
+                    return vec;
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            log.error("获取 point 向量失败: workId={}", workId, e);
+            return null;
+        }
+    }
+
     /** Qdrant point */
     public static class Point {
         public long id;

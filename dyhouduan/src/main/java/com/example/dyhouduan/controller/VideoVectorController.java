@@ -50,9 +50,9 @@ public class VideoVectorController {
         return Response.success(map);
     }
 
-    /** 启动全量处理 */
+    /** 启动全量处理（force=true 强制全部重新分析） */
     @PostMapping("/process-all")
-    public Response<Map<String, Object>> processAll() {
+    public Response<Map<String, Object>> processAll(@RequestParam(defaultValue = "false") boolean force) {
         if (running) {
             return Response.error("正在处理中，请等待完成");
         }
@@ -62,63 +62,76 @@ public class VideoVectorController {
         processed.set(0);
         success.set(0);
 
+        boolean finalForce = force;
         CompletableFuture.runAsync(() -> {
             try {
                 currentStatus = "初始化 Qdrant collection";
                 qdrantService.ensureCollection();
 
                 currentStatus = "获取已处理列表";
-                Set<Long> done = qdrantService.getProcessedIds();
-                log.info("已有 {} 个视频已完成向量化", done.size());
+                Set<Long> done = finalForce ? Set.of() : qdrantService.getProcessedIds();
+                log.info("已有 {} 个视频已完成向量化 (force={})", done.size(), finalForce);
 
                 currentStatus = "加载所有作品";
-                // 分批从数据库加载
                 List<Work> allWorks = loadAllWorks();
-                total.set(allWorks.size());
-                log.info("共 {} 个视频待处理，跳过 {} 个已处理", allWorks.size(), done.size());
-
-                List<QdrantService.Point> batch = new ArrayList<>();
-                int batchSize = 10;
-
-                for (Work work : allWorks) {
-                    if (!running) break;
-
-                    if (done.contains(work.getId())) {
-                        processed.incrementAndGet();
-                        continue;
-                    }
-
-                    currentStatus = "分析: " + (work.getTitle() != null ?
-                            work.getTitle().substring(0, Math.min(30, work.getTitle().length())) : "无标题");
-
-                    try {
-                        VideoTagService.TagResult result = videoTagService.analyze(work);
-
-                        Map<String, Object> payload = new LinkedHashMap<>();
-                        payload.put("title", work.getTitle());
-                        payload.put("description", work.getDescription());
-                        payload.put("tags", result.tags());
-                        payload.put("work_id", work.getId());
-                        payload.put("user_id", work.getUserId());
-
-                        batch.add(new QdrantService.Point(work.getId(), result.vector(), payload));
-                        success.incrementAndGet();
-
-                        if (batch.size() >= batchSize) {
-                            qdrantService.upsertPoints(batch);
-                            batch.clear();
-                            Thread.sleep(500); // 避免 DeepSeek 限流
-                        }
-                    } catch (Exception e) {
-                        log.error("处理视频 {} 失败: {}", work.getId(), e.getMessage());
-                    }
-
-                    processed.incrementAndGet();
+                // 过滤已处理
+                List<Work> pending = new ArrayList<>();
+                for (Work w : allWorks) {
+                    if (!done.contains(w.getId())) pending.add(w);
                 }
+                total.set(pending.size());
+                log.info("共 {} 个视频待处理", pending.size());
 
-                // 处理剩余批次
-                if (!batch.isEmpty()) {
-                    qdrantService.upsertPoints(batch);
+                // 4线程并发处理
+                var executor = java.util.concurrent.Executors.newFixedThreadPool(4);
+                List<QdrantService.Point> pointBatch = Collections.synchronizedList(new ArrayList<>());
+
+                try {
+                    List<CompletableFuture<Void>> futures = new ArrayList<>();
+                    for (Work work : pending) {
+                        futures.add(CompletableFuture.runAsync(() -> {
+                            if (!running) return;
+                            currentStatus = "分析: " + (work.getTitle() != null ?
+                                    work.getTitle().substring(0, Math.min(30, work.getTitle().length())) : "无标题");
+                            try {
+                                VideoTagService.TagResult result = videoTagService.analyze(work);
+                                Map<String, Object> payload = new LinkedHashMap<>();
+                                payload.put("title", work.getTitle());
+                                payload.put("description", work.getDescription());
+                                payload.put("tags", result.tags());
+                                payload.put("source", result.source());
+                                payload.put("work_id", work.getId());
+                                payload.put("user_id", work.getUserId());
+                                pointBatch.add(new QdrantService.Point(work.getId(), result.vector(), payload));
+                                success.incrementAndGet();
+                            } catch (Exception e) {
+                                log.error("处理视频 {} 失败: {}", work.getId(), e.getMessage());
+                            }
+                            processed.incrementAndGet();
+
+                            // 每20条批量写入一次
+                            if (pointBatch.size() >= 20) {
+                                List<QdrantService.Point> batch;
+                                synchronized (pointBatch) {
+                                    batch = new ArrayList<>(pointBatch);
+                                    pointBatch.clear();
+                                }
+                                try { qdrantService.upsertPoints(batch); } catch (Exception ex) {
+                                    log.error("批量写入Qdrant失败", ex);
+                                }
+                            }
+                        }, executor));
+                    }
+
+                    // 等所有完成
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+                    // 写入剩余
+                    if (!pointBatch.isEmpty()) {
+                        qdrantService.upsertPoints(new ArrayList<>(pointBatch));
+                    }
+                } finally {
+                    executor.shutdown();
                 }
 
                 currentStatus = "完成";
@@ -150,6 +163,7 @@ public class VideoVectorController {
             payload.put("title", work.getTitle());
             payload.put("description", work.getDescription());
             payload.put("tags", result.tags());
+            payload.put("source", result.source());
             payload.put("work_id", work.getId());
             payload.put("user_id", work.getUserId());
 

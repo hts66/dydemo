@@ -1,10 +1,13 @@
 """FastAPI 入口 — Agent 对话服务"""
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from config import settings
 from models import ChatRequest, ChatResponse, HealthResponse
@@ -52,6 +55,26 @@ app.add_middleware(
 )
 
 
+# ===================== 异常处理（调试用） =====================
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """记录请求体验证失败的详细信息"""
+    body = None
+    try:
+        body = await request.body()
+        body_str = body.decode("utf-8")[:500]
+    except Exception:
+        body_str = "<无法读取>"
+    log.error(f"❌ 请求验证失败 [{request.method} {request.url.path}]")
+    log.error(f"   Body: {body_str}")
+    log.error(f"   错误: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body_str},
+    )
+
+
 # ===================== 端点 =====================
 
 @app.get("/health", response_model=HealthResponse)
@@ -61,7 +84,7 @@ async def health():
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Agent 对话接口 — 接收多轮对话，返回智能回复 + 可选视频推荐"""
+    """Agent 对话接口 — 支持 thread_id 持续对话"""
     try:
         # 将 ChatMessage 列表转为 LangChain 格式
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
@@ -69,15 +92,26 @@ async def chat(request: ChatRequest):
         if not messages:
             raise HTTPException(status_code=400, detail="消息列表为空")
 
-        log.info(f"收到对话请求: {messages[-1]['content'][:50]}...")
+        # 会话管理：有 thread_id 则继续对话，否则创建新会话
+        thread_id = request.thread_id or str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
 
-        # 调用 LangGraph Agent
-        result = await agent_graph.ainvoke({"messages": messages})
+        log.info(f"收到对话请求 [thread={thread_id[:8]}]: {messages[-1]['content'][:50]}...")
+
+        # 调用 LangGraph Agent（带 checkpointer，自动恢复/保存会话状态）
+        result = await agent_graph.ainvoke(
+            {"messages": messages},
+            config=config,
+        )
 
         # 提取最后一条 AI 消息
         ai_messages = [m for m in result["messages"] if m.type == "ai"]
         if not ai_messages:
-            return ChatResponse(type="chat", text="抱歉，我暂时无法回答你的问题。")
+            return ChatResponse(
+                type="chat",
+                text="抱歉，我暂时无法回答你的问题。",
+                thread_id=thread_id,
+            )
 
         last_ai = ai_messages[-1]
         reply_text = last_ai.content if hasattr(last_ai, "content") else str(last_ai)
@@ -97,13 +131,34 @@ async def chat(request: ChatRequest):
             type=response_type,
             text=reply_text.strip(),
             videos=videos,
+            thread_id=thread_id,
         )
 
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"Agent 处理失败: {e}", exc_info=True)
-        return ChatResponse(type="chat", text="抱歉，我暂时无法回答你的问题。")
+        return ChatResponse(
+            type="chat",
+            text="抱歉，我暂时无法回答你的问题。",
+            thread_id=request.thread_id,
+        )
+
+
+# ===================== 删除会话（清空对话记忆） =====================
+
+@app.post("/chat/reset")
+async def reset_chat(thread_id: str):
+    """重置指定会话，清空对话记忆"""
+    try:
+        # MemorySaver 在当前进程中无法直接删除，但我们可以返回新的 thread_id
+        # 客户端切换到新 thread_id 即相当于重置
+        new_thread_id = str(uuid.uuid4())
+        log.info(f"会话重置: {thread_id[:8]} → {new_thread_id[:8]}")
+        return {"status": "ok", "new_thread_id": new_thread_id}
+    except Exception as e:
+        log.error(f"重置会话失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===================== 辅助函数 =====================
@@ -139,11 +194,11 @@ async def _fetch_video_cards(video_ids: list) -> list:
                         w = data["data"]
                         videos.append({
                             "id": w["id"],
-                            "title": w.get("title", ""),
-                            "description": w.get("description", ""),
-                            "url": w.get("url", ""),
-                            "thumbnail": w.get("thumbnail", ""),
-                            "username": w.get("username", "匿名用户"),
+                            "title": w.get("title") or "",
+                            "description": w.get("description") or "",
+                            "url": w.get("url") or "",
+                            "thumbnail": w.get("thumbnail") or "",
+                            "username": w.get("username") or "匿名用户",
                             "score": 0.0,
                         })
     except Exception as e:

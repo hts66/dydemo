@@ -158,10 +158,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getRecommendWorks, getFriendsWorks, getFollowingWorks, recordWatchHistory } from '../api/work'
+import { getWorks, getRecommendWorks, getFriendsWorks, getFollowingWorks, recordWatchHistory } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
@@ -190,6 +190,7 @@ const isRefreshing = ref(false)
 const currentPage = ref(1)
 const hasMore = ref(true)
 const pageSize = 10
+const randomSeed = ref(0)
 
 // ── Comment state ─────────────────────────────────────
 const showComments = ref(false)
@@ -220,10 +221,15 @@ const fetchApi = async (page) => {
     hasMore.value = false  // 关注作品不分页，先关掉防止重复请求
     return await getFollowingWorks(uid)
   }
-  return getRecommendWorks(page, pageSize)
+  return getWorks(page, pageSize, true, randomSeed.value)
 }
 
 const refreshData = async () => {
+  // 推荐界面刷新时跳转到精选界面
+  if (props.apiType === 'recommend') {
+    router.push('/featured')
+    return
+  }
   isRefreshing.value = true
   currentPage.value = 1
   hasMore.value = true
@@ -479,7 +485,12 @@ const handleCurrentItem = (data) => {
 
 onMounted(() => {
   on(EVENT_KEY.CURRENT_ITEM, handleCurrentItem)
-  getData()
+})
+
+// 每次激活（包括首次挂载）时：生成新随机种子，重新加载视频
+onActivated(() => {
+  randomSeed.value = Math.floor(Math.random() * 1000000)
+  getData(true)
 })
 
 onUnmounted(() => {
