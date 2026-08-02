@@ -2,75 +2,109 @@
 
 import json
 import logging
+import random
 from typing import List, Optional
 import httpx
 
 from langchain_core.tools import tool
 
 from config import settings
-from services.tag_vocabulary import build_vector, all_tags_for_prompt
+from services.tag_vocabulary import build_vector, all_tags_for_prompt, TAG_MAP
 from services.qdrant_client import qdrant_client
 
 log = logging.getLogger(__name__)
 
 
 @tool
-async def recommend_videos(query: str, limit: int = 5) -> str:
+async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str] = None) -> str:
     """
     根据用户的自然语言描述推荐视频。当用户说"推荐XX视频"、"给我找XX"、"有没有XX"等时调用此工具。
     内部会先用AI提取标签，再通过向量搜索匹配最相似的视频。向量搜索无结果时自动降级为关键词搜索。
 
+    **重要 — 避免重复推荐**:
+    - 用户说"换一批"、"再来几个"、"还有吗"时，必须把之前推荐过的所有视频ID传入 exclude_ids
+    - exclude_ids 格式为逗号分隔的ID字符串，如 "3,7,12"
+    - 首次推荐不传 exclude_ids
+
+    精确度优先：只返回相似度 score >= 0.3 的视频，宁少勿滥。
+
     Args:
         query: 用户的原始查询语句，例如"推荐御姐黑丝长腿视频"
-        limit: 返回视频数量，默认5个
+        limit: 最多返回视频数量，默认5个
+        exclude_ids: 逗号分隔的已推荐视频ID，如 "1,3,5"。传空字符串表示不排除
 
     Returns:
         JSON格式的推荐结果，包含视频列表
     """
     try:
+        # 解析排除列表
+        excluded = set()
+        if exclude_ids and exclude_ids.strip():
+            try:
+                excluded = {int(x.strip()) for x in exclude_ids.split(",") if x.strip().isdigit()}
+            except Exception:
+                pass
+        log.info(f"推荐请求: '{query}' limit={limit} exclude={excluded}")
+
         # 1. 用 DeepSeek 提取标签
         tags = await _extract_tags(query)
         log.info(f"标签提取: '{query}' → {tags}")
+        if not tags:
+            return json.dumps({
+                "found": False,
+                "message": f"没有找到与「{query}」相关的视频，换个关键词试试吧~",
+                "videos": []
+            }, ensure_ascii=False)
 
-        # 2. 尝试向量搜索
-        vector_results = []
-        if tags:
-            vector = build_vector(tags)
-            if not all(v == 0.0 for v in vector):
-                vector_results = await qdrant_client.search_similar(vector, limit)
+        # 2. Qdrant 标签硬过滤
+        vector = build_vector(tags)
+        valid_tags = [t for t in tags if t in TAG_MAP]
+        must_clauses = [{"key": "tags", "match": {"text": t}} for t in valid_tags]
+        filter_obj = {"must": must_clauses}
+        vector_results = await qdrant_client.search_similar(
+            vector, 200, filter_obj=filter_obj
+        )
+        log.info(f"硬过滤({valid_tags}): {len(vector_results)} 条")
 
-        # 3. 格式化向量搜索结果
-        videos = []
+        if not vector_results:
+            return json.dumps({
+                "found": False,
+                "message": f"没有找到「{'、'.join(tags)}」相关的视频，换个关键词试试吧~",
+                "videos": []
+            }, ensure_ascii=False)
+
+        # 3. 格式化 → 排除已推荐 → 随机采样 → 不排序
+        all_videos = []
         for r in vector_results:
             payload = r.get("payload", {})
-            videos.append({
+            all_videos.append({
                 "id": r["id"],
-                "score": round(r["score"], 2),
                 "title": payload.get("title", ""),
                 "description": payload.get("description", ""),
                 "tags": payload.get("tags", []),
             })
 
-        # 4. 向量搜索无结果 → 自动降级为关键词搜索
-        if not videos:
-            log.info(f"向量搜索无结果，降级为关键词搜索: '{query}'")
-            keyword_videos = await _keyword_search(query, limit)
-            if keyword_videos:
-                return json.dumps({
-                    "found": True,
-                    "message": f"为你找到了 {len(keyword_videos)} 个与「{query}」相关的视频，快来看看吧~ 🎬",
-                    "videos": keyword_videos,
-                }, ensure_ascii=False)
-            else:
-                return json.dumps({
-                    "found": False,
-                    "message": f"没有找到与「{query}」相关的视频，换个关键词试试吧~",
-                    "videos": []
-                }, ensure_ascii=False)
+        available = [v for v in all_videos if v["id"] not in excluded]
 
-        # 5. 向量搜索有结果
-        tag_str = "、".join(tags) if tags else query
-        message = f"为你找到了 {len(videos)} 个「{tag_str}」视频，快来看看吧~ 🎬"
+        if not available:
+            tag_str = "、".join(tags)
+            return json.dumps({
+                "found": False,
+                "message": f"「{tag_str}」的视频看完啦，试试其他类型吧~ 😊",
+                "tags": tags,
+                "videos": [],
+            }, ensure_ascii=False)
+
+        if len(available) > limit:
+            videos = random.sample(available, limit)
+        else:
+            videos = available
+
+        tag_str = "、".join(tags)
+        if excluded:
+            message = f"为你换了一批「{tag_str}」视频，共 {len(videos)} 个，快来看看吧~ 🎬"
+        else:
+            message = f"为你找到了 {len(videos)} 个「{tag_str}」视频，快来看看吧~ 🎬"
 
         return json.dumps({
             "found": True,
@@ -188,26 +222,24 @@ async def get_hot_videos(limit: int = 5) -> str:
 # ===================== 内部辅助函数 =====================
 
 async def _extract_tags(user_query: str) -> List[str]:
-    """用 DeepSeek 从用户查询中提取标签"""
-    prompt = f"""你是一个视频标签提取器。用户想要搜索视频，请从标签列表中选择最匹配的标签，返回JSON数组。
+    """用 DeepSeek 从用户查询中提取标签（只保留标签表中存在的）"""
+    prompt = f"""你是一个视频标签提取器。从下方标签列表中选择用户想要的标签，返回JSON数组。
 
-标签列表:
+## 标签列表
 {all_tags_for_prompt()}
 
-重要规则:
-- 用户可能说"推荐XX视频"、"给我XX的"、"有没有XX"等
-- 首先判断用户想要哪个大类视频(美女/小猫/风景)，必须选一个大类
-- 如果用户明确说了属性(如"黑丝"、"橘猫"、"日落")，一定要选上对应的子标签
-- 如果用户没提的属性不要选
-- **关键: 如果用户提到的概念在标签列表中完全找不到对应类别，返回空数组[]**
-- 例如"推荐赛车视频"→赛车不在任何标签中→返回[]
-- 例如"推荐游戏视频"→游戏不在任何标签中→返回[]
-- 只返回JSON数组,如: ["美女","黑丝","长腿"] 或 ["小猫","橘猫","玩耍"] 或 ["风景","日落","海景"]
-- 数组第一项必须是大类标签(美女/小猫/风景)
-- 不要返回任何解释文字
+## 规则
+- 第一项必须是大类(美女/小猫/风景)
+- 用户明确提到的属性才选，没提到的不要猜
+- 标签列表中找不到对应标签 → 返回[]
+- 示例:
+  "推荐黑丝视频" → ["美女","黑丝"]
+  "我要看JK制服" → ["美女","JK制服"]
+  "有没有跳舞的美女" → ["美女","单人舞"]
+  "推荐橘猫" → ["小猫","橘猫"]
+  "赛车视频" → []
 
 用户查询: {user_query}
-
 JSON数组:"""
 
     try:
@@ -240,7 +272,13 @@ JSON数组:"""
                     content = content[s:e + 1]
 
             tags = json.loads(content)
-            return tags if isinstance(tags, list) else []
+            if isinstance(tags, list):
+                # 只保留标签表中存在的词，过滤 LLM 编造的
+                valid = [t for t in tags if t in TAG_MAP]
+                if len(valid) != len(tags):
+                    log.info(f"标签过滤: {tags} → {valid}")
+                return valid
+            return []
 
     except Exception as e:
         log.warning(f"标签提取失败: {e}")
@@ -262,7 +300,8 @@ async def _keyword_search(keyword: str, limit: int = 5) -> list:
             if data.get("code") != 200:
                 return []
 
-            works = data["data"].get("records", [])
+            raw = data["data"]
+            works = raw if isinstance(raw, list) else raw.get("records", [])
             return [
                 {
                     "id": w["id"],

@@ -44,14 +44,18 @@ class QdrantClient:
                 log.warning(f"Qdrant collection 创建可能失败: {put_resp.text}")
 
     async def search_similar(
-        self, vector: List[float], limit: int = 5
+        self, vector: List[float], limit: int = 5,
+        filter_obj: dict = None, offset: int = 0
     ) -> List[Dict[str, Any]]:
         """搜索与给定向量最相似的点，返回 [{id, score, payload}]"""
         body = {
             "vector": vector,
             "limit": limit,
+            "offset": offset,
             "with_payload": True,
         }
+        if filter_obj:
+            body["filter"] = filter_obj
 
         async with httpx.AsyncClient(timeout=15) as client:
             url = f"{self.base_url}/collections/{self.collection}/points/search"

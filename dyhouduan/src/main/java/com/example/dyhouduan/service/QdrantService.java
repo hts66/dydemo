@@ -181,6 +181,29 @@ public class QdrantService {
         return ids;
     }
 
+    /** 删除单个 point */
+    public void deletePoint(Long id) {
+        try {
+            String url = config.getBaseUrl() + "/collections/" + COLLECTION_VIDEO_TAGS + "/points/delete";
+            Map<String, Object> body = Map.of("points", List.of(id));
+            String json = mapper.writeValueAsString(body);
+
+            HttpRequest req = apiRequest(url)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                log.info("Qdrant 删除 point 成功: id={}", id);
+            } else {
+                log.warn("Qdrant 删除 point 失败: id={} status={}", id, resp.statusCode());
+            }
+        } catch (Exception e) {
+            log.error("Qdrant 删除 point 异常: id={}", id, e);
+        }
+    }
+
     /** 获取单个 point 的向量 */
     public float[] getPointVector(Long workId) {
         try {

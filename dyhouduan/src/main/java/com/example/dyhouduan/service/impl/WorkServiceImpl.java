@@ -10,6 +10,7 @@ import com.example.dyhouduan.service.WorkService;
 import com.example.dyhouduan.config.MinioProperties;
 import com.example.dyhouduan.utils.FileStorageUtil;
 import com.example.dyhouduan.utils.MinioUtil;
+import com.example.dyhouduan.service.QdrantService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,9 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
 
     @Autowired
     private MinioProperties minioProperties;
+
+    @Autowired
+    private QdrantService qdrantService;
 
     private boolean useMinio() {
         return minioProperties.getEndpoint() != null && !minioProperties.getEndpoint().isEmpty();
@@ -138,7 +142,10 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
         LambdaQueryWrapper<Like> likeWrapper = new LambdaQueryWrapper<>();
         likeWrapper.eq(Like::getWorkId, id);
         likeMapper.delete(likeWrapper);
-        
+
+        // 同步删除 Qdrant 向量，避免 AI 推荐已删除的视频
+        qdrantService.deletePoint(id);
+
         return removeById(id);
     }
 }
