@@ -1,5 +1,11 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="my-container" ref="containerRef" @scroll="handleScroll">
+    <!-- 返回按钮 -->
+    <button class="back-btn" @click="goBack">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff">
+        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+      </svg>
+    </button>
     <div
       class="profile-header-section"
       :class="{ 'header-editable': isOwnProfile }"
@@ -205,19 +211,28 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getUserWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
 import { getUserById, updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
 import VideoPlayerModal from '../components/VideoPlayerModal.vue'
+import { emit, EVENT_KEY } from '../utils/bus'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 const containerRef = ref(null)
+
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/featured')
+  }
+}
 
 const activeTab = ref('works')
 const targetUser = ref(null)
@@ -482,6 +497,8 @@ const handleFollowTarget = async () => {
       } else {
         followerCount.value--
       }
+      // 广播关注状态变化，通知推荐/关注/朋友界面同步
+      emit(EVENT_KEY.FOLLOW_STATUS_CHANGED, { userId: targetUser.value.id, isFollowing: result.data })
     }
   } catch (err) {
     console.error('关注操作失败', err)
@@ -541,6 +558,31 @@ const handleTabClick = (tab) => {
 onMounted(() => {
   loadUserProfile()
 })
+
+// keep-alive 激活时：若 userId 变化（跳转到另一位作者主页），重新加载该用户数据
+onActivated(async () => {
+  const routeUserId = route.params.userId ? parseInt(route.params.userId) : null
+  const currentUser = targetUser.value
+  const currentLoadedId = currentUser?.id || null
+
+  if (routeUserId !== currentLoadedId) {
+    // 重置状态，避免残留上一个作者的数据
+    activeTab.value = 'works'
+    targetWorks.value = []
+    worksPage.value = 1
+    worksHasMore.value = true
+    followingList.value = []
+    followerList.value = []
+    isFollowingTarget.value = false
+    currentBackground.value = ''
+    headerHeight.value = 300
+    await nextTick()
+    if (containerRef.value) containerRef.value.scrollTop = 0
+    loadUserProfile()
+  } else if (containerRef.value) {
+    // 同一作者主页重新激活（如从推荐界面返回），恢复滚动位置由浏览器/keep-alive 处理
+  }
+})
 </script>
 
 <style scoped>
@@ -548,6 +590,27 @@ onMounted(() => {
   height: 100%;
   overflow-y: auto;
   background: #1a1a1a;
+}
+
+.back-btn {
+  position: fixed;
+  top: 72px;
+  right: 32px;
+  z-index: 100;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .profile-header-section {

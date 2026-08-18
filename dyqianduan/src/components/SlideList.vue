@@ -47,7 +47,7 @@
               :class="{ followed: item.isFollowing }"
               @click.stop="handleFollow(item)"
             >
-              <img :src="item.avatar || defaultAvatar" alt="" />
+              <img :src="item.avatar || defaultAvatar" alt="" @click.stop="goToProfile(item)" />
               <svg v-if="item.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
               </svg>
@@ -159,7 +159,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getWorks, getRecommendWorks, getFriendsWorks, getFollowingWorks, recordWatchHistory } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
@@ -168,9 +168,10 @@ import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
 import { sendMessage } from '../api/message'
 import SlideVerticalInfinite from './SlideVerticalInfinite.vue'
 import BaseVideo from './BaseVideo.vue'
-import { on, off, EVENT_KEY } from '../utils/bus'
+import { on, off, emit, EVENT_KEY } from '../utils/bus'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
@@ -192,6 +193,7 @@ const hasMore = ref(true)
 const pageSize = 10
 const randomSeed = ref(0)
 const hasInitialized = ref(false)
+const needReload = ref(false)  // 关注/取消关注后标记需要重新加载（关注/朋友界面）
 
 // ── Comment state ─────────────────────────────────────
 const showComments = ref(false)
@@ -226,8 +228,8 @@ const fetchApi = async (page) => {
 }
 
 const refreshData = async () => {
-  // 推荐界面刷新时跳转到精选界面
-  if (props.apiType === 'recommend') {
+  // 推荐/关注/朋友界面刷新时跳转到精选界面
+  if (props.apiType === 'recommend' || props.apiType === 'following' || props.apiType === 'friends') {
     router.push('/featured')
     return
   }
@@ -364,6 +366,8 @@ const handleFollow = async (work) => {
       works.value.forEach(w => {
         if (w.userId === followeeId) w.isFollowing = result.data
       })
+      // 广播关注状态变化，通知其他 SlideList 实例同步
+      emit(EVENT_KEY.FOLLOW_STATUS_CHANGED, { userId: followeeId, isFollowing: result.data })
     }
   } catch (err) {
     console.error('关注失败', err)
@@ -434,9 +438,25 @@ const doShare = async (friend) => {
 // ── Navigation ────────────────────────────────────────
 const goToProfile = (item) => {
   const userId = item.userId || item.user_id
-  if (userId) {
-    router.push(`/profile/${userId}`)
+  if (!userId) return
+
+  // 如果已在该作者主页，提示
+  const currentProfileId = route.params.userId
+  if (currentProfileId && String(currentProfileId) === String(userId)) {
+    alert('你已进入该作者主页')
+    return
   }
+
+  // 如果是自己，跳转到 /my
+  if (userStore.isLoggedIn) {
+    const currentUserId = userStore.user?.id
+    if (currentUserId && String(currentUserId) === String(userId)) {
+      router.push('/my')
+      return
+    }
+  }
+
+  router.push(`/profile/${userId}`)
 }
 
 // ── Utilities ─────────────────────────────────────────
@@ -484,12 +504,34 @@ const handleCurrentItem = (data) => {
   }
 }
 
+// ── Event bus: 关注状态变化同步 ──────────────────────
+// 推荐界面直接更新本地 works 的关注状态；关注/朋友界面标记需要重新加载
+const handleFollowStatusChanged = ({ userId, isFollowing }) => {
+  if (props.apiType === 'recommend') {
+    works.value.forEach(w => {
+      if (String(w.userId) === String(userId)) w.isFollowing = isFollowing
+    })
+  } else if (props.apiType === 'following' || props.apiType === 'friends') {
+    needReload.value = true
+  }
+}
+
 onMounted(() => {
   on(EVENT_KEY.CURRENT_ITEM, handleCurrentItem)
+  on(EVENT_KEY.FOLLOW_STATUS_CHANGED, handleFollowStatusChanged)
 })
 
 // 仅首次激活时加载推荐视频；keep-alive 返回页面时保留已有列表和播放位置。
 onActivated(() => {
+  // 关注/取消关注后需要重新加载（关注/朋友界面）
+  if (needReload.value) {
+    needReload.value = false
+    hasInitialized.value = true
+    randomSeed.value = Math.floor(Math.random() * 1000000)
+    getData(true)
+    return
+  }
+
   if (hasInitialized.value) {
     nextTick(() => slideRef.value?.playCurrentVideo())
     return
@@ -506,6 +548,7 @@ onDeactivated(() => {
 
 onUnmounted(() => {
   off(EVENT_KEY.CURRENT_ITEM, handleCurrentItem)
+  off(EVENT_KEY.FOLLOW_STATUS_CHANGED, handleFollowStatusChanged)
 })
 
 defineExpose({

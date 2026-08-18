@@ -80,7 +80,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { on, off, emit, EVENT_KEY } from '../utils/bus'
 
 const props = defineProps({
@@ -104,6 +104,7 @@ const currentTime = ref(0)
 const duration = ref(0)
 const isDraggingProgress = ref(false)
 const wasPlayingBeforeDrag = ref(false)
+const isActive = ref(true)  // keep-alive 激活状态标记，deactivated 后不响应事件总线 play 事件
 
 let playToken = 0
 let progressDragRAF = null
@@ -372,6 +373,8 @@ const onError = () => {
 
 // Event bus handlers
 const handleBroadcast = (data) => {
+  // 未激活（keep-alive 已缓存）时不响应任何事件，避免其他界面的视频事件触发本界面播放
+  if (!isActive.value) return
   if (data.id === videoId.value) {
     if (data.type === 'play') {
       play()
@@ -384,6 +387,7 @@ const handleBroadcast = (data) => {
 }
 
 const handlePlay = (id) => {
+  if (!isActive.value) return
   if (id === videoId.value) {
     play()
   } else {
@@ -392,12 +396,14 @@ const handlePlay = (id) => {
 }
 
 const handleStop = (id) => {
+  if (!isActive.value) return
   if (id === videoId.value) {
     stop()
   }
 }
 
 const handleToggle = (id) => {
+  if (!isActive.value) return
   if (id === videoId.value) {
     toggle()
   }
@@ -405,6 +411,7 @@ const handleToggle = (id) => {
 
 // Watch isPlay prop
 watch(() => props.isPlay, (newVal) => {
+  if (!isActive.value) return  // 未激活时不响应
   if (newVal) {
     nextTick(() => play())
   } else {
@@ -416,7 +423,7 @@ watch(videoSrc, (newSrc) => {
   thumbnailError.value = false  // 新视频源，重置封面错误状态
   if (newSrc && videoRef.value) {
     videoRef.value.src = newSrc
-    if (props.isPlay) {
+    if (props.isPlay && isActive.value) {
       nextTick(() => play())
     }
   }
@@ -431,6 +438,20 @@ onMounted(() => {
   if (props.isPlay) {
     nextTick(() => play())
   }
+})
+
+// keep-alive 激活：恢复事件响应，若当前应播放则播放
+onActivated(() => {
+  isActive.value = true
+  if (props.isPlay) {
+    nextTick(() => play())
+  }
+})
+
+// keep-alive 停用：立即暂停视频并停止响应事件总线事件，避免与其他界面视频冲突
+onDeactivated(() => {
+  isActive.value = false
+  pause()
 })
 
 onUnmounted(() => {

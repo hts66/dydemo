@@ -80,8 +80,14 @@ const router = createRouter({
     },
     {
       path: '/profile/:userId',
-      name: 'Profile',
-      component: () => import('../views/Profile.vue'),
+      component: MainLayout,
+      children: [
+        {
+          path: '',
+          name: 'Profile',
+          component: () => import('../views/Profile.vue'),
+        },
+      ],
     },
     {
       path: '/upload',
@@ -100,6 +106,15 @@ const router = createRouter({
       ],
     },
   ],
+})
+
+// 全局前置守卫：浏览器刷新（首次导航，from 为空）时，推荐/关注/朋友界面重定向到精选界面
+router.beforeEach((to, from, next) => {
+  if (from.matched.length === 0 && ['/recommend', '/following', '/friends'].includes(to.path)) {
+    next('/featured')
+  } else {
+    next()
+  }
 })
 
 export default router

@@ -1,6 +1,6 @@
 <template>
   <div class="recommend-container">
-    <SlideList ref="slideListRef" />
+    <SlideList ref="slideListRef" api-type="recommend" />
   </div>
 </template>
 
