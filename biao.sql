@@ -72,3 +72,4 @@ CREATE TABLE comments (
 );
 
 ALTER TABLE works ADD COLUMN comments_count INT DEFAULT 0;
+

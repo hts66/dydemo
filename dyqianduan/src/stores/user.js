@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { login, register } from '../api/auth'
+import { clearAuthSession, markAuthenticated } from '../utils/authSession'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
@@ -12,6 +13,7 @@ export const useUserStore = defineStore('user', () => {
   const setToken = (newToken) => {
     token.value = newToken
     localStorage.setItem('token', newToken)
+    if (newToken) markAuthenticated()
   }
 
   const setRefreshToken = (newRefreshToken) => {
@@ -28,9 +30,7 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     refreshToken.value = ''
     user.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('refreshToken')
-    localStorage.removeItem('user')
+    clearAuthSession()
   }
 
   const handleLogin = async (email, password) => {

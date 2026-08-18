@@ -1,0 +1,51 @@
+# ===== 敏感配置 =====
+.env
+*.env
+!*.env.example
+docker-compose.override.yml
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.classpath
+.project
+.settings/
+.factorypath
+.springBeans
+.sts4-cache
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Java / Maven =====
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# ===== Node =====
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ===== 日志 =====
+logs/
+*.log
+npm-debug.log*
+
+# ===== 临时数据 =====
+douyin_downloads/
+all_work_ids.txt

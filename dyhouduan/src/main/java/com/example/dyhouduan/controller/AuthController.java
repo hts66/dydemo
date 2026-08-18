@@ -6,6 +6,7 @@ import com.example.dyhouduan.dto.RegisterRequest;
 import com.example.dyhouduan.dto.RefreshTokenRequest;
 import com.example.dyhouduan.dto.Response;
 import com.example.dyhouduan.entity.User;
+import com.example.dyhouduan.exception.VerificationCodeRateLimitException;
 import com.example.dyhouduan.service.UserService;
 import com.example.dyhouduan.service.VerificationCodeService;
 import com.example.dyhouduan.utils.JwtUtil;
@@ -74,7 +75,7 @@ public class AuthController {
                 return Response.error(401, "密码错误");
             }
 
-            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
+            verificationCodeService.clearCode(request.getEmail());
 
             String token = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
             String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
@@ -107,7 +108,7 @@ public class AuthController {
             }
 
             User user = userService.register(request);
-            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
+            verificationCodeService.clearCode(request.getEmail());
             return Response.success("注册成功", user);
         } catch (Exception e) {
             return Response.error(400, e.getMessage());
@@ -126,7 +127,7 @@ public class AuthController {
             }
 
             User user = userService.register(request);
-            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
+            verificationCodeService.clearCode(request.getEmail());
 
             String token = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
             String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
@@ -148,10 +149,16 @@ public class AuthController {
     }
 
     @PostMapping("/send-code")
-    public Response<String> sendCode(@RequestBody SendCodeRequest request) {
+    public Response<SendCodeResponse> sendCode(@RequestBody SendCodeRequest request) {
         try {
             verificationCodeService.generateCode(request.getEmail());
-            return Response.success("验证码已发送");
+            return Response.success("验证码已发送", new SendCodeResponse(60));
+        } catch (VerificationCodeRateLimitException e) {
+            return new Response<>(
+                    429,
+                    "验证码发送过于频繁，请稍后重试",
+                    new SendCodeResponse(e.getRetryAfterSeconds())
+            );
         } catch (Exception e) {
             return Response.error(500, "发送验证码失败: " + e.getMessage());
         }
@@ -172,7 +179,7 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public Response<String> forgotPassword(@RequestBody SendCodeRequest request) {
+    public Response<SendCodeResponse> forgotPassword(@RequestBody SendCodeRequest request) {
         try {
             User user = userService.findByEmail(request.getEmail());
             if (user == null) {
@@ -180,7 +187,13 @@ public class AuthController {
             }
 
             verificationCodeService.generateCode(request.getEmail());
-            return Response.success("验证码已发送");
+            return Response.success("验证码已发送", new SendCodeResponse(60));
+        } catch (VerificationCodeRateLimitException e) {
+            return new Response<>(
+                    429,
+                    "验证码发送过于频繁，请稍后重试",
+                    new SendCodeResponse(e.getRetryAfterSeconds())
+            );
         } catch (Exception e) {
             return Response.error(500, "发送验证码失败: " + e.getMessage());
         }
@@ -198,7 +211,7 @@ public class AuthController {
             }
 
             userService.resetPassword(request.getEmail(), request.getNewPassword());
-            redisTemplate.opsForValue().set("email_code:" + request.getEmail(), "");
+            verificationCodeService.clearCode(request.getEmail());
             return Response.success("密码重置成功");
         } catch (Exception e) {
             return Response.error(400, e.getMessage());
@@ -272,7 +285,6 @@ public class AuthController {
             String email = jwtUtil.getEmail(refreshToken);
 
             String newAccessToken = jwtUtil.generateAccessToken(userId, email);
-            String newRefreshToken = jwtUtil.generateRefreshToken(userId, email);
 
             User user = userService.getById(userId);
             LoginResponse.UserVO userVO = new LoginResponse.UserVO(
@@ -285,7 +297,9 @@ public class AuthController {
                     user.getBackground()
             );
 
-            return Response.success(new LoginResponse(newAccessToken, newRefreshToken, userVO));
+            // Keep the original refresh token so its seven-day expiry remains the
+            // absolute maximum length of this login session.
+            return Response.success(new LoginResponse(newAccessToken, refreshToken, userVO));
         } catch (Exception e) {
             return Response.error(401, "刷新令牌无效，请重新登录");
         }
@@ -324,6 +338,18 @@ public class AuthController {
             redisTemplate.opsForValue().set("captcha:" + captchaKey, "");
         }
         return valid;
+    }
+
+    public static class SendCodeResponse {
+        private final long retryAfter;
+
+        public SendCodeResponse(long retryAfter) {
+            this.retryAfter = retryAfter;
+        }
+
+        public long getRetryAfter() {
+            return retryAfter;
+        }
     }
 
     public static class SendCodeRequest {

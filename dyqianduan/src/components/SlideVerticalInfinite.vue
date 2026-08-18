@@ -388,6 +388,13 @@ const stopCurrentVideo = () => {
   }
 }
 
+const pauseCurrentVideo = () => {
+  const item = props.list[currentIndex.value]
+  if (item) {
+    emit(EVENT_KEY.SINGLE_CLICK_BROADCAST, { id: item.id, type: 'pause' })
+  }
+}
+
 // ── Watchers ──────────────────────────────────────────
 watch(() => props.active, (newVal) => {
   if (newVal !== currentIndex.value) {
@@ -443,6 +450,7 @@ defineExpose({
   currentIndex,
   switchToIndex,
   playCurrentVideo,
+  pauseCurrentVideo,
   stopCurrentVideo
 })
 </script>

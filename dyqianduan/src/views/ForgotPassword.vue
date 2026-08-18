@@ -106,6 +106,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
+import {
+  getRetryAfterSeconds,
+  useVerificationCodeCooldown,
+} from '../composables/useVerificationCodeCooldown'
 
 const router = useRouter()
 
@@ -128,8 +132,13 @@ const errors = reactive({
 const errorMessage = ref('')
 const successMessage = ref('')
 const loading = ref(false)
-const codeBtnDisabled = ref(false)
-const codeCountdown = ref(60)
+const {
+  codeBtnDisabled,
+  codeCountdown,
+  beginSending,
+  markSent,
+  markFailed,
+} = useVerificationCodeCooldown()
 const captchaImage = ref('')
 
 const refreshCaptcha = async () => {
@@ -195,6 +204,8 @@ const validateForm = () => {
 }
 
 const sendCode = async () => {
+  if (codeBtnDisabled.value) return
+
   if (!form.email) {
     errors.email = '请输入邮箱'
     return
@@ -204,24 +215,17 @@ const sendCode = async () => {
     return
   }
 
+  if (!beginSending()) return
+
   try {
     await request.post('/auth/forgot-password', {
-      email: form.email,
+      email: form.email.trim().toLowerCase(),
     })
-
-    codeBtnDisabled.value = true
-    codeCountdown.value = 60
-
-    const timer = setInterval(() => {
-      codeCountdown.value--
-      if (codeCountdown.value <= 0) {
-        clearInterval(timer)
-        codeBtnDisabled.value = false
-        codeCountdown.value = 60
-      }
-    }, 1000)
+    markSent()
   } catch (err: any) {
-    errorMessage.value = err?.message || '发送验证码失败'
+    markFailed(getRetryAfterSeconds(err))
+    errorMessage.value =
+      err?.response?.data?.message || err?.message || '发送验证码失败'
     await refreshCaptcha()
     form.captcha = ''
   }

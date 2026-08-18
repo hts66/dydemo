@@ -80,4 +80,12 @@ public class JwtUtil {
             return true;
         }
     }
+
+    public boolean isAccessToken(String token) {
+        try {
+            return "access".equals(parseToken(token).get("type", String.class));
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

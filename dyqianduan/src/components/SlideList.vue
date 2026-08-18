@@ -158,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, onActivated } from 'vue'
+import { ref, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getWorks, getRecommendWorks, getFriendsWorks, getFollowingWorks, recordWatchHistory } from '../api/work'
@@ -191,6 +191,7 @@ const currentPage = ref(1)
 const hasMore = ref(true)
 const pageSize = 10
 const randomSeed = ref(0)
+const hasInitialized = ref(false)
 
 // ── Comment state ─────────────────────────────────────
 const showComments = ref(false)
@@ -487,10 +488,20 @@ onMounted(() => {
   on(EVENT_KEY.CURRENT_ITEM, handleCurrentItem)
 })
 
-// 每次激活（包括首次挂载）时：生成新随机种子，重新加载视频
+// 仅首次激活时加载推荐视频；keep-alive 返回页面时保留已有列表和播放位置。
 onActivated(() => {
+  if (hasInitialized.value) {
+    nextTick(() => slideRef.value?.playCurrentVideo())
+    return
+  }
+
+  hasInitialized.value = true
   randomSeed.value = Math.floor(Math.random() * 1000000)
   getData(true)
+})
+
+onDeactivated(() => {
+  slideRef.value?.pauseCurrentVideo()
 })
 
 onUnmounted(() => {

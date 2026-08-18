@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <div class="my-container" ref="containerRef" @scroll="handleScroll">
     <div
       class="profile-header-section"
@@ -162,23 +162,13 @@
       </div>
     </div>
 
-    <div v-if="currentVideo" class="video-modal" @click.self="closeVideo">
-      <div class="modal-content">
-        <button class="close-btn" @click="closeVideo">✕</button>
-        <video
-          ref="videoPlayer"
-          :src="currentVideo.url"
-          :poster="currentVideo.thumbnail"
-          class="modal-video"
-          controls
-          autoplay
-        ></video>
-        <div class="video-info-overlay">
-          <h3>{{ currentVideo.title }}</h3>
-          <p>{{ currentVideo.description }}</p>
-        </div>
-      </div>
-    </div>
+    <!-- 视频播放弹窗（可复用组件） -->
+    <VideoPlayerModal
+      :visible="showVideoModal"
+      :work="currentVideo"
+      @close="closeVideo"
+      @work-updated="handleWorkUpdated"
+    />
 
     <div v-if="showBackgroundPicker" class="background-modal" @click.self="toggleBackgroundPicker">
       <div class="background-modal-content">
@@ -221,6 +211,7 @@ import { useUserStore } from '../stores/user'
 import { getUserWorks } from '../api/work'
 import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
 import { getUserById, updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
+import VideoPlayerModal from '../components/VideoPlayerModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -238,7 +229,7 @@ const followerCount = ref(0)
 const worksCount = ref(0)
 const isFollowingTarget = ref(false)
 const currentVideo = ref(null)
-const videoPlayer = ref(null)
+const showVideoModal = ref(false)
 const headerHeight = ref(300)
 
 // 分页懒加载
@@ -498,20 +489,40 @@ const handleFollowTarget = async () => {
 }
 
 const goToProfile = (userId) => {
+  if (!userId) return
+  
+  const currentProfileId = route.params.userId
+  if (currentProfileId && String(currentProfileId) === String(userId)) {
+    alert('你已进入该作者主页')
+    return
+  }
+  
+  if (userStore.isLoggedIn) {
+    const currentUserId = userStore.user?.id
+    if (currentUserId && String(currentUserId) === String(userId)) {
+      router.push('/my')
+      return
+    }
+  }
+  
   router.push(`/profile/${userId}`)
 }
 
 const openVideo = (work) => {
-  currentVideo.value = work
-  document.body.style.overflow = 'hidden'
+  currentVideo.value = { ...work }
+  showVideoModal.value = true
 }
 
 const closeVideo = () => {
-  if (videoPlayer.value) {
-    videoPlayer.value.pause()
-  }
+  showVideoModal.value = false
   currentVideo.value = null
-  document.body.style.overflow = ''
+}
+
+const handleWorkUpdated = (updatedWork) => {
+  const idx = targetWorks.value.findIndex(w => w.id === updatedWork.id)
+  if (idx !== -1) {
+    targetWorks.value[idx] = { ...targetWorks.value[idx], ...updatedWork }
+  }
 }
 
 const formatCount = (count) => {
@@ -892,60 +903,6 @@ onMounted(() => {
   padding: 20px 0;
   color: #888;
   font-size: 13px;
-}
-
-.video-modal {
-  position: fixed;
-  top: 0;
-  left: 200px;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  position: relative;
-  width: 80%;
-  max-width: 900px;
-}
-
-.close-btn {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  width: 36px;
-  height: 36px;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-}
-
-.modal-video {
-  width: 100%;
-  border-radius: 8px;
-}
-
-.video-info-overlay {
-  padding: 16px 0;
-}
-
-.video-info-overlay h3 {
-  color: #fff;
-  font-size: 18px;
-  margin: 0 0 8px 0;
-}
-
-.video-info-overlay p {
-  color: #aaa;
-  font-size: 14px;
-  margin: 0;
 }
 
 .background-modal {

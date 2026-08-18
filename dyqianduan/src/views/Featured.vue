@@ -61,193 +61,38 @@
       </div>
     </div>
 
-    <!-- 视频播放弹窗 -->
-    <div v-if="currentVideo" class="video-modal" @click.self="closeVideo">
-      <div class="modal-content">
-        <button class="close-btn" @click="closeVideo">✕</button>
-        <div class="modal-body">
-          <div class="video-section">
-            <video
-              ref="videoPlayer"
-              :src="getProxyUrl(currentVideo.url)"
-              :poster="currentVideo.thumbnail"
-              class="modal-video"
-              controls
-              loop
-              preload="auto"
-              playsinline
-              webkit-playsinline
-              x5-playsinline
-            ></video>
-          </div>
-          <div class="interaction-section">
-            <div class="author-bar">
-              <button
-                v-if="!isOwnVideo(currentVideo)"
-                class="follow-btn"
-                :class="{ followed: currentVideo.isFollowing }"
-                @click.stop="handleFollow"
-              >
-                <img :src="currentVideo.avatar || defaultAvatar" @click.stop="goToProfile" />
-                <svg v-if="!currentVideo.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
-                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-              </button>
-              <span class="author-name">{{ currentVideo.username || '匿名用户' }}</span>
-            </div>
-            <div class="action-bar">
-              <button
-                class="action-btn like-btn"
-                :class="{ liked: currentVideo.isLiked }"
-                @click="handleLike"
-              >
-                <svg v-if="currentVideo.isLiked" viewBox="0 0 24 24" width="20" height="20" fill="#fe2c55">
-                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="#fff">
-                  <path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3z"/>
-                </svg>
-                <span>{{ currentVideo.likesCount || 0 }}</span>
-              </button>
-              <button class="action-btn" @click="scrollToComments">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">
-                  <path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/>
-                </svg>
-                <span>{{ currentVideo.commentsCount || 0 }}</span>
-              </button>
-              <div class="share-wrapper">
-                <button class="action-btn" @click.stop="toggleSharePopup">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">
-                    <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
-                  </svg>
-                </button>
-                <div class="share-popup" v-if="showSharePopup" @click.stop>
-                  <div class="share-popup-header">
-                    分享给好友
-                    <button class="share-popup-close" @click="showSharePopup = false; shareSuccess = false">✕</button>
-                  </div>
-                  <div class="share-popup-list">
-                    <div v-if="friends.length === 0" class="share-no-friends">
-                      <p>你还没有好友，快去添加好友吧</p>
-                    </div>
-                    <div
-                      v-for="friend in friends"
-                      :key="friend.id"
-                      class="share-friend-item"
-                      @click="shareToFriend(friend)"
-                    >
-                      <img :src="friend.avatar || defaultAvatar" />
-                      <span>{{ friend.username }}</span>
-                    </div>
-                  </div>
-                  <div v-if="shareSuccess" class="share-success">已分享 ✓</div>
-                </div>
-              </div>
-            </div>
-            <div class="comments-section" ref="commentsSection">
-              <h4 class="comments-title">评论</h4>
-              <div class="comments-list">
-                <div v-for="comment in comments" :key="comment.id" class="comment-item">
-                  <img :src="comment.avatar || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
-                  <div class="comment-content">
-                    <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
-                    <span class="comment-text">{{ comment.content }}</span>
-                  </div>
-                  <span class="comment-time">{{ formatTime(comment.createdAt) }}</span>
-                </div>
-                <div v-if="comments.length === 0" class="no-comments">
-                  <p>暂无评论，快来抢沙发吧~</p>
-                </div>
-              </div>
-              <div class="comment-input-section">
-                <input
-                  type="text"
-                  v-model="commentInput"
-                  class="comment-input"
-                  placeholder="输入评论..."
-                  @keyup.enter="handleComment"
-                  :disabled="!userStore.isLoggedIn"
-                />
-                <button class="send-btn" @click="handleComment" :disabled="!commentInput.trim() || !userStore.isLoggedIn">
-                  发送
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- 视频播放弹窗（可复用组件） -->
+    <VideoPlayerModal
+      :visible="showVideoModal"
+      :work="currentVideo"
+      @close="closeVideo"
+      @work-updated="handleWorkUpdated"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getWorks } from '../api/work'
-import { toggleLike, isLiked as checkIsLiked } from '../api/like'
-import { getComments, addComment } from '../api/comment'
-import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
-import { sendMessage } from '../api/message'
+import { toggleFollow, checkIsFollowing } from '../api/follow'
+import VideoPlayerModal from '../components/VideoPlayerModal.vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/video/proxy?url=${encodeURIComponent(url)}`
-  }
-  return url
-}
-
-
 const works = ref([])
 const currentVideo = ref(null)
-const comments = ref([])
-const commentInput = ref('')
-const videoPlayer = ref(null)
-const commentsSection = ref(null)
+const showVideoModal = ref(false)
 
-// 分页懒加载 + 随机种子（保证同一次会话分页顺序一致）
+// 分页懒加载 + 随机种子
 const page = ref(1)
 const hasMore = ref(true)
 const loading = ref(false)
 const randomSeed = ref(Math.floor(Math.random() * 2147483647))
-
-// 分享相关
-const showSharePopup = ref(false)
-const shareSuccess = ref(false)
-const friends = ref([])
-
-const toggleSharePopup = async () => {
-  if (showSharePopup.value) {
-    showSharePopup.value = false
-    shareSuccess.value = false
-    return
-  }
-  // 加载好友列表
-  if (userStore.user?.id) {
-    try {
-      const result = await getFriends(userStore.user.id)
-      if (result.code === 200) friends.value = result.data || []
-    } catch (_) { friends.value = [] }
-  }
-  showSharePopup.value = true
-}
-
-const shareToFriend = async (friend) => {
-  if (!currentVideo.value) return
-  const title = currentVideo.value.title || '无标题'
-  const description = currentVideo.value.description || ''
-  const content = `📹 [分享视频] ${currentVideo.value.id}\n${title}\n${description}\n${currentVideo.value.url}\n${currentVideo.value.thumbnail || ''}`
-  try {
-    await sendMessage(friend.id, content)
-    shareSuccess.value = true
-    setTimeout(() => { showSharePopup.value = false; shareSuccess.value = false }, 1000)
-  } catch (_) {}
-}
 
 const filteredWorks = computed(() => works.value)
 
@@ -270,17 +115,11 @@ const loadWorks = async (reset = false) => {
         for (const work of result.data) {
           work.isLiked = false
           work.isFollowing = false
-          if (userStore.isLoggedIn) {
+          if (userStore.isLoggedIn && work.userId) {
             try {
-              const likeResult = await checkIsLiked(work.id)
-              if (likeResult.code === 200) work.isLiked = likeResult.data
+              const followResult = await checkIsFollowing(work.userId)
+              if (followResult.code === 200) work.isFollowing = followResult.data
             } catch (e) {}
-            if (work.userId) {
-              try {
-                const followResult = await checkIsFollowing(work.userId)
-                if (followResult.code === 200) work.isFollowing = followResult.data
-              } catch (e) {}
-            }
           }
         }
         works.value.push(...result.data)
@@ -315,70 +154,19 @@ onMounted(async () => {
 })
 
 const openVideo = async (work) => {
-  currentVideo.value = work
-  document.body.style.overflow = 'hidden'
-  comments.value = []
-  
-  try {
-    const [likeResult, commentResult, followResult] = await Promise.all([
-      checkIsLiked(work.id),
-      getComments(work.id),
-      userStore.isLoggedIn ? checkIsFollowing(work.userId) : Promise.resolve({ code: 200, data: false })
-    ])
-    if (likeResult.code === 200) {
-      currentVideo.value.isLiked = likeResult.data
-    }
-    if (commentResult.code === 200) {
-      comments.value = commentResult.data
-    }
-    if (followResult.code === 200) {
-      currentVideo.value.isFollowing = followResult.data
-    }
-  } catch (err) {
-    console.error('加载视频信息失败', err)
-  }
-  
-  await nextTick()
-  
-  if (videoPlayer.value) {
-    videoPlayer.value.currentTime = 0
-    videoPlayer.value.muted = false
-    videoPlayer.value.play().catch(e => {
-      // 浏览器阻止不静音自动播放时，回退到静音
-      if (e.name === 'NotAllowedError') {
-        videoPlayer.value.muted = true
-        videoPlayer.value.play().catch(err => console.error('播放失败', err))
-      } else {
-        console.error('播放失败', e)
-      }
-    })
-  }
+  currentVideo.value = { ...work }
+  showVideoModal.value = true
 }
 
 const closeVideo = () => {
-  if (videoPlayer.value) {
-    videoPlayer.value.pause()
-  }
+  showVideoModal.value = false
   currentVideo.value = null
-  comments.value = []
-  commentInput.value = ''
-  document.body.style.overflow = ''
 }
 
-const handleLike = async () => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
-    return
-  }
-  
-  try {
-    const result = await toggleLike(currentVideo.value.id)
-    if (result.code === 200) {
-      currentVideo.value.isLiked = result.data
-      currentVideo.value.likesCount += result.data ? 1 : -1
-    }
-  } catch (err) {
-    console.error('点赞失败', err)
+const handleWorkUpdated = (updatedWork) => {
+  const idx = works.value.findIndex(w => w.id === updatedWork.id)
+  if (idx !== -1) {
+    works.value[idx] = { ...works.value[idx], ...updatedWork }
   }
 }
 
@@ -388,18 +176,15 @@ const handleFollow = async (work) => {
     return
   }
   
-  const targetWork = work || currentVideo.value
-  if (!targetWork) return
+  if (!work) return
   
   try {
-    const result = await toggleFollow(targetWork.userId)
+    const result = await toggleFollow(work.userId)
     if (result.code === 200) {
-      targetWork.isFollowing = result.data
-      if (work) {
-        const idx = filteredWorks.value.findIndex(w => w.id === work.id)
-        if (idx !== -1) {
-          filteredWorks.value[idx].isFollowing = result.data
-        }
+      work.isFollowing = result.data
+      const idx = filteredWorks.value.findIndex(w => w.id === work.id)
+      if (idx !== -1) {
+        filteredWorks.value[idx].isFollowing = result.data
       }
     }
   } catch (err) {
@@ -408,40 +193,23 @@ const handleFollow = async (work) => {
 }
 
 const goToProfile = (userId) => {
-  const targetUserId = userId || (currentVideo.value && currentVideo.value.userId)
-  if (targetUserId) {
-    router.push(`/profile/${targetUserId}`)
-  }
-}
-
-const handleComment = async () => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
+  if (!userId) return
+  
+  const currentProfileId = route.params.userId
+  if (currentProfileId && String(currentProfileId) === String(userId)) {
+    alert('你已进入该作者主页')
     return
   }
   
-  if (!commentInput.value.trim()) return
-  
-  try {
-    const result = await addComment(currentVideo.value.id, commentInput.value.trim())
-    if (result.code === 200) {
-      commentInput.value = ''
-      currentVideo.value.commentsCount++
-      
-      const commentResult = await getComments(currentVideo.value.id)
-      if (commentResult.code === 200) {
-        comments.value = commentResult.data
-      }
+  if (userStore.isLoggedIn) {
+    const currentUserId = userStore.user?.id
+    if (currentUserId && String(currentUserId) === String(userId)) {
+      router.push('/my')
+      return
     }
-  } catch (err) {
-    console.error('评论失败', err)
   }
-}
-
-const scrollToComments = () => {
-  nextTick(() => {
-    commentsSection.value?.scrollIntoView({ behavior: 'smooth' })
-  })
+  
+  router.push(`/profile/${userId}`)
 }
 
 const formatCount = (count) => {
@@ -461,23 +229,6 @@ const isOwnVideo = (work) => {
   if (!userStore.isLoggedIn || !userStore.user || !work) return false
   return work.userId === userStore.user.id
 }
-
-const formatTime = (dateStr) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 60) return `${minutes}分钟前`
-  
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 24) return `${hours}小时前`
-  
-  const days = Math.floor(diff / 86400000)
-  return `${days}天前`
-}
-
 </script>
 
 <style scoped>
@@ -654,348 +405,5 @@ const formatTime = (dateStr) => {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-/* 视频弹窗 */
-.video-modal {
-  position: fixed;
-  top: 0;
-  left: 200px;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  position: relative;
-  width: 90%;
-  max-width: 900px;
-  height: 90vh;
-  background: #1a1a1a;
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.close-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-  z-index: 10;
-}
-
-.modal-body {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-.video-section {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;
-}
-
-.modal-video {
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.interaction-section {
-  width: 350px;
-  display: flex;
-  flex-direction: column;
-  background: #1a1a1a;
-  border-left: 1px solid #333;
-}
-
-.author-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px;
-  border-bottom: 1px solid #333;
-}
-
-.follow-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  position: relative;
-  width: 50px;
-  height: 50px;
-  flex-shrink: 0;
-}
-
-.follow-btn img {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  cursor: pointer;
-}
-
-.follow-btn.followed img {
-  border-color: #fe2c55;
-}
-
-.follow-btn svg {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 18px;
-  height: 18px;
-  background: #fe2c55;
-  border-radius: 50%;
-  padding: 3px;
-  border: 2px solid rgba(0, 0, 0, 0.5);
-}
-
-.follow-btn:hover {
-  transform: scale(1.1);
-}
-
-.author-name {
-  flex: 1;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.action-bar {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid #333;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.action-btn.liked {
-  background: rgba(254, 44, 85, 0.2);
-}
-
-.comments-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.comments-title {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 500;
-  padding: 12px 16px;
-  margin: 0;
-  border-bottom: 1px solid #333;
-}
-
-.comments-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-}
-
-.comment-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.comment-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
-.comment-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.comment-author {
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.comment-text {
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
-}
-
-.comment-time {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.no-comments {
-  text-align: center;
-  padding: 40px 0;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.comment-input-section {
-  display: flex;
-  gap: 10px;
-  padding: 12px 16px;
-  border-top: 1px solid #333;
-}
-
-.comment-input {
-  flex: 1;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid #333;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 14px;
-  outline: none;
-}
-
-.comment-input:focus {
-  border-color: #fe2c55;
-}
-
-.send-btn {
-  padding: 10px 24px;
-  background: #fe2c55;
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.send-btn:hover:not(:disabled) {
-  background: #e0264d;
-}
-
-.send-btn:disabled {
-  background: #555;
-  cursor: not-allowed;
-}
-
-.share-wrapper {
-  position: relative;
-}
-
-.share-popup {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 8px;
-  width: 220px;
-  background: #2a2a2a;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-  z-index: 100;
-}
-
-.share-popup-header {
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-  border-bottom: 1px solid #3a3a3a;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.share-popup-close {
-  background: none; border: none; color: #888; font-size: 16px; cursor: pointer; padding: 2px 6px;
-}
-.share-popup-close:hover { color: #fff; }
-
-.share-popup-list {
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.share-no-friends {
-  padding: 24px 16px;
-  text-align: center;
-  color: #888;
-  font-size: 13px;
-}
-
-.share-friend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.share-friend-item:hover {
-  background: #3a3a3a;
-}
-
-.share-friend-item img {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.share-friend-item span {
-  color: #fff;
-  font-size: 13px;
-}
-
-.share-success {
-  padding: 10px 16px;
-  text-align: center;
-  color: #2ecc71;
-  font-size: 13px;
-  border-top: 1px solid #3a3a3a;
 }
 </style>

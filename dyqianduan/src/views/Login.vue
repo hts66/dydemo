@@ -97,11 +97,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import request from '../utils/request'
+import {
+  getRetryAfterSeconds,
+  useVerificationCodeCooldown,
+} from '../composables/useVerificationCodeCooldown'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const form = reactive({
@@ -121,8 +126,13 @@ const errors = reactive({
 
 const errorMessage = ref('')
 const loading = ref(false)
-const codeBtnDisabled = ref(false)
-const codeCountdown = ref(60)
+const {
+  codeBtnDisabled,
+  codeCountdown,
+  beginSending,
+  markSent,
+  markFailed,
+} = useVerificationCodeCooldown()
 const captchaImage = ref('')
 
 const refreshCaptcha = async () => {
@@ -179,6 +189,8 @@ const validateForm = () => {
 }
 
 const sendCode = async () => {
+  if (codeBtnDisabled.value) return
+
   if (!form.email) {
     errors.email = '请输入邮箱'
     return
@@ -188,24 +200,17 @@ const sendCode = async () => {
     return
   }
 
+  if (!beginSending()) return
+
   try {
     await request.post('/auth/send-code', {
-      email: form.email,
+      email: form.email.trim().toLowerCase(),
     })
-
-    codeBtnDisabled.value = true
-    codeCountdown.value = 60
-
-    const timer = setInterval(() => {
-      codeCountdown.value--
-      if (codeCountdown.value <= 0) {
-        clearInterval(timer)
-        codeBtnDisabled.value = false
-        codeCountdown.value = 60
-      }
-    }, 1000)
+    markSent()
   } catch (err: any) {
-    errorMessage.value = err?.message || '发送验证码失败'
+    markFailed(getRetryAfterSeconds(err))
+    errorMessage.value =
+      err?.response?.data?.message || err?.message || '发送验证码失败'
   }
 }
 
@@ -230,13 +235,9 @@ const handleSubmit = async () => {
     
     if (loginData.token) {
       console.log('Setting token:', loginData.token)
-      localStorage.setItem('token', loginData.token)
-      localStorage.setItem('refreshToken', loginData.refreshToken || '')
-      localStorage.setItem('user', JSON.stringify(loginData.user || {}))
-      
-      userStore.token = loginData.token
-      userStore.refreshToken = loginData.refreshToken || ''
-      userStore.user = loginData.user || {}
+      userStore.setToken(loginData.token)
+      userStore.setRefreshToken(loginData.refreshToken || '')
+      userStore.setUser(loginData.user || {})
     } else {
       console.error('No token in response:', loginData)
       errorMessage.value = '登录失败：未获取到令牌'
@@ -246,7 +247,10 @@ const handleSubmit = async () => {
 
     console.log('Navigating to /featured')
     setTimeout(() => {
-      window.location.href = '/featured'
+      const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+        ? route.query.redirect
+        : '/featured'
+      window.location.href = redirect
     }, 100)
   } catch (err: any) {
     errorMessage.value = err?.message || '登录失败'

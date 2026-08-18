@@ -45,16 +45,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
                     "/api/auth/reset-password",
                     "/api/auth/refresh",
                     "/api/captcha",
-                    "/api/works/**",
                     "/api/video/**",
+                    "/api/users/*",
+                    "/api/works/**",
                     "/api/comments/**",
-                    "/api/users/**",
-                    "/api/follows/**",
                     "/api/likes/**",
-                    "/api/upload/**",
-                    "/api/chat/**",
+                    "/api/follows/**",
                     "/api/messages/**",
-                    "/api/vector/**",
                     "/error"
                 );
     }
