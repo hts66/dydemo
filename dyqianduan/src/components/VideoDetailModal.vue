@@ -7,8 +7,8 @@
         <div class="video-section">
           <video
             ref="videoPlayer"
-            :src="getProxyUrl(currentVideo.url)"
-            :poster="currentVideo.thumbnail"
+            :src="mediaUrl(currentVideo.url)"
+            :poster="mediaUrl(currentVideo.thumbnail)"
             class="modal-video"
             controls
             loop
@@ -26,7 +26,7 @@
               class="author-avatar-btn"
               @click.stop="goToAuthorProfile"
             >
-              <img :src="currentVideo.avatar || defaultAvatar" alt="" />
+              <img :src="mediaUrl(currentVideo.avatar) || defaultAvatar" alt="" />
             </button>
             <button
               type="button"
@@ -83,7 +83,7 @@
                     class="share-friend-item"
                     @click="shareToFriend(friend)"
                   >
-                    <img :src="friend.avatar || defaultAvatar" alt="" />
+                    <img :src="mediaUrl(friend.avatar) || defaultAvatar" alt="" />
                     <span>{{ friend.username }}</span>
                   </div>
                 </div>
@@ -97,7 +97,7 @@
             <div class="comments-list">
               <div v-for="comment in comments" :key="comment.id" class="comment-item">
                 <img
-                  :src="comment.avatar || defaultAvatar"
+                  :src="mediaUrl(comment.avatar) || defaultAvatar"
                   class="comment-avatar"
                   alt=""
                   @click.stop="goToProfile(comment.userId)"
@@ -145,6 +145,7 @@ import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
 import { sendMessage } from '../api/message'
+import { mediaUrl } from '../utils/media'
 
 const props = defineProps({
   video: { type: Object, default: null },
@@ -173,14 +174,6 @@ const isOwnVideo = computed(() => {
   const authorId = Number(currentVideo.value?.userId ?? currentVideo.value?.user_id)
   return Boolean(userStore.user?.id && authorId && Number(userStore.user.id) === authorId)
 })
-
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return '/api/video/proxy?url=' + encodeURIComponent(url)
-  }
-  return url
-}
 
 const normalizeVideo = (video) => {
   if (!video) return null

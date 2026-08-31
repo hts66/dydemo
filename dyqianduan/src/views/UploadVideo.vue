@@ -22,7 +22,7 @@
             <p class="upload-hint">支持 MP4、MOV、AVI 格式，大小不超过 100MB</p>
           </div>
           <div v-else class="video-preview">
-            <video :src="videoUrl" controls class="preview-video"></video>
+            <video :src="mediaUrl(videoUrl)" controls class="preview-video"></video>
             <button class="reupload-btn" @click="triggerVideoUpload">重新上传</button>
           </div>
           <input
@@ -62,7 +62,7 @@
               <p class="upload-text">点击上传封面</p>
             </div>
             <div v-else class="thumbnail-preview">
-              <img :src="thumbnailUrl" class="preview-img" />
+              <img :src="mediaUrl(thumbnailUrl)" class="preview-img" />
               <button class="reupload-btn" @click="triggerThumbnailUpload">重新上传</button>
             </div>
             <input
@@ -92,6 +92,7 @@ import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { publishWork } from '../api/work'
 import { uploadVideo, uploadImage, cleanupFiles } from '../api/upload'
+import { mediaUrl } from '../utils/media'
 
 const router = useRouter()
 const userStore = useUserStore()

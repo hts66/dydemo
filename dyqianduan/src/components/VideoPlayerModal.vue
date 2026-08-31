@@ -6,8 +6,8 @@
         <div class="video-section">
           <video
             ref="videoPlayer"
-            :src="getProxyUrl(work?.url)"
-            :poster="work?.thumbnail"
+            :src="mediaUrl(work?.url)"
+            :poster="mediaUrl(work?.thumbnail)"
             class="modal-video"
             controls
             loop
@@ -26,7 +26,7 @@
               @click.stop="handleFollow"
             >
               <img
-                :src="work.avatar || defaultAvatar"
+                :src="mediaUrl(work.avatar) || defaultAvatar"
                 @click.stop="goToProfile(work.userId)"
               />
               <svg v-if="!work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
@@ -35,7 +35,7 @@
             </button>
             <div v-else class="follow-btn" style="cursor: pointer;">
               <img
-                :src="work?.avatar || defaultAvatar"
+                :src="mediaUrl(work?.avatar) || defaultAvatar"
                 @click.stop="goToProfile(work?.userId)"
               />
             </div>
@@ -66,7 +66,7 @@
             <h4 class="comments-title">评论</h4>
             <div class="comments-list">
               <div v-for="comment in comments" :key="comment.id" class="comment-item">
-                <img :src="comment.avatar || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
+                <img :src="mediaUrl(comment.avatar) || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
                 <div class="comment-content">
                   <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
                   <span class="comment-text">{{ comment.content }}</span>
@@ -104,6 +104,7 @@ import { useUserStore } from '../stores/user'
 import { isLiked as checkIsLiked, toggleLike } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { checkIsFollowing, toggleFollow } from '../api/follow'
+import { mediaUrl } from '../utils/media'
 
 const props = defineProps({
   visible: {
@@ -127,14 +128,6 @@ const videoPlayer = ref(null)
 const commentsSection = ref(null)
 const comments = ref([])
 const commentInput = ref('')
-
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/video/proxy?url=${encodeURIComponent(url)}`
-  }
-  return url
-}
 
 const isOwnVideo = () => {
   if (!userStore.isLoggedIn || !userStore.user || !props.work) return false

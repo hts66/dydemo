@@ -87,7 +87,7 @@
             @mouseleave="hideFriendsPopup"
           >
             <div class="user-avatar" @click="$router.push('/my')">
-              <img :src="userStore.user?.avatar || defaultAvatar" />
+              <img :src="mediaUrl(userStore.user?.avatar) || defaultAvatar" />
             </div>
             <div class="friends-popup" v-show="showFriends">
               <div class="friends-popup-header">
@@ -98,7 +98,7 @@
                   <p>你还没有好友，快去添加吧</p>
                 </div>
                 <div v-for="friend in friends" :key="friend.id" class="friend-item" @click.stop="openChat(friend)">
-                  <img :src="friend.avatar || defaultAvatar" />
+                  <img :src="mediaUrl(friend.avatar) || defaultAvatar" />
                   <span class="friend-name">{{ friend.username }}</span>
                 </div>
               </div>
@@ -151,7 +151,7 @@
             :class="{ 'active': currentChatFriend?.id === friend.id }"
             @click="openChat(friend)"
           >
-            <img :src="friend.avatar || defaultAvatar" />
+            <img :src="mediaUrl(friend.avatar) || defaultAvatar" />
             <span class="chat-sidebar-name">{{ friend.username }}</span>
           </div>
         </div>
@@ -159,7 +159,7 @@
       <div class="chat-main">
         <div class="chat-header" v-if="currentChatFriend">
           <div class="chat-user-info">
-            <img :src="currentChatFriend?.avatar || defaultAvatar" />
+            <img :src="mediaUrl(currentChatFriend?.avatar) || defaultAvatar" />
             <span class="chat-username">{{ currentChatFriend?.username }}</span>
           </div>
           <div class="chat-header-actions">
@@ -187,7 +187,7 @@
               class="chat-message"
               :class="{ 'sent': msg.senderId === userStore.user?.id }"
             >
-              <img :src="msg.senderId === userStore.user?.id ? (userStore.user?.avatar || defaultAvatar) : (msg.senderAvatar || defaultAvatar)" class="msg-avatar" />
+              <img :src="msg.senderId === userStore.user?.id ? (mediaUrl(userStore.user?.avatar) || defaultAvatar) : (mediaUrl(msg.senderAvatar) || defaultAvatar)" class="msg-avatar" />
               <div class="msg-content">
                 <template v-if="msg.isRecommend">
                   <div class="recommend-text">{{ msg.content.text }}</div>
@@ -199,7 +199,7 @@
                       @click.stop="playRecommendVideo(video)"
                     >
                       <div class="recommend-video-thumb">
-                        <img :src="proxyThumb(video.thumbnail)" alt="" @error="e => e.target.style.display='none'" />
+                        <img :src="mediaUrl(video.thumbnail)" alt="" @error="e => e.target.style.display='none'" />
                         <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
                       </div>
                       <div class="recommend-video-info">
@@ -278,7 +278,7 @@
                 :class="{ followed: sharedVideoData.isFollowing }"
                 @click.stop="handleSharedFollow"
               >
-                <img :src="sharedVideoData.avatar || defaultAvatar" @click.stop="goToSharedProfile" />
+                <img :src="mediaUrl(sharedVideoData.avatar) || defaultAvatar" @click.stop="goToSharedProfile" />
                 <svg v-if="!sharedVideoData.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                   <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                 </svg>
@@ -314,7 +314,7 @@
               <h4 class="shared-comments-title">评论</h4>
               <div class="shared-comments-list">
                 <div v-for="comment in sharedVideoComments" :key="comment.id" class="shared-comment-item">
-                  <img :src="comment.avatar || defaultAvatar" class="shared-comment-avatar" />
+                  <img :src="mediaUrl(comment.avatar) || defaultAvatar" class="shared-comment-avatar" />
                   <div class="shared-comment-content">
                     <span class="shared-comment-author">{{ comment.username || '匿名用户' }}</span>
                     <span class="shared-comment-text">{{ comment.content }}</span>
@@ -356,6 +356,7 @@ import { getWorkById } from '../api/work'
 import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import request from '../utils/request'
+import { mediaUrl } from '../utils/media'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -387,12 +388,10 @@ const chatMessagesRef = ref(null)
 const threadId = ref('')  // AI 对话会话ID，用于持续对话
 
 const goToFriends = () => {
-  console.log('朋友按钮被点击了')
   router.push('/friends')
 }
 
 const goToFollowing = () => {
-  console.log('关注按钮被点击了')
   router.push('/following')
 }
 
@@ -593,16 +592,7 @@ const formatMsgTime = (dateStr) => {
 const sharedVideoUrl = ref('')
 const showSharedVideo = ref(false)
 const sharedVideoData = ref(null)  // 完整的作品数据
-const sharedVideoPoster = computed(() => {
-  const thumb = sharedVideoData.value?.thumbnail
-  if (thumb) {
-    if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
-      return `/api/video/proxy?url=${encodeURIComponent(thumb)}`
-    }
-    return thumb
-  }
-  return ''
-})
+const sharedVideoPoster = computed(() => mediaUrl(sharedVideoData.value?.thumbnail))
 
 const isShareMsg = (content) => content && content.startsWith('📹 [分享视频]')
 
@@ -653,17 +643,8 @@ const getShareDescription = (content) => parseShareMsg(content).description
 const getShareUrl = (content) => parseShareMsg(content).url
 const getShareWorkId = (content) => parseShareMsg(content).workId
 
-// 获取分享视频的封面URL（外部URL走代理）
-const getShareThumbnail = (content) => {
-  const thumb = parseShareMsg(content).thumbnail
-  if (thumb) {
-    if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
-      return `/api/video/proxy?url=${encodeURIComponent(thumb)}`
-    }
-    return thumb
-  }
-  return ''
-}
+// 获取分享视频的封面URL
+const getShareThumbnail = (content) => mediaUrl(parseShareMsg(content).thumbnail)
 
 // 从后端获取完整作品数据
 const fetchVideoDetail = async (workId) => {
@@ -679,9 +660,7 @@ const fetchVideoDetail = async (workId) => {
 const playRecommendVideo = async (video) => {
   if (!video.url) return
 
-  sharedVideoUrl.value = video.url.startsWith('http')
-    ? `/api/video/proxy?url=${encodeURIComponent(video.url)}`
-    : video.url
+  sharedVideoUrl.value = mediaUrl(video.url)
 
   sharedVideoData.value = {
     id: video.id,
@@ -724,20 +703,11 @@ const playRecommendVideo = async (video) => {
   document.body.style.overflow = 'hidden'
 }
 
-// 封面图代理
-const proxyThumb = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/video/proxy?url=${encodeURIComponent(url)}`
-  }
-  return url
-}
-
 const playSharedVideo = async (content) => {
   const parsed = parseShareMsg(content)
   if (!parsed.url) return
 
-  sharedVideoUrl.value = `/api/video/proxy?url=${encodeURIComponent(parsed.url)}`
+  sharedVideoUrl.value = mediaUrl(parsed.url)
 
   // 尝试获取完整作品数据
   if (parsed.workId) {

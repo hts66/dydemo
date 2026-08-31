@@ -25,7 +25,7 @@
             <div class="video-bottom-info">
               <div class="author-info" @click.stop="goToProfile(item)">
                 <img
-                  :src="item.avatar || defaultAvatar"
+                  :src="mediaUrl(item.avatar) || defaultAvatar"
                   class="author-avatar"
                   @error="e => e.target.src = defaultAvatar"
                 />
@@ -47,7 +47,7 @@
               :class="{ followed: item.isFollowing }"
               @click.stop="handleFollow(item)"
             >
-              <img :src="item.avatar || defaultAvatar" alt="" @click.stop="goToProfile(item)" />
+              <img :src="mediaUrl(item.avatar) || defaultAvatar" alt="" @click.stop="goToProfile(item)" />
               <svg v-if="item.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
               </svg>
@@ -103,7 +103,7 @@
           </div>
           <div class="comment-list" ref="commentListRef">
             <div v-for="comment in comments" :key="comment.id" class="comment-item">
-              <img :src="comment.avatar || defaultAvatar" class="comment-avatar" alt="" />
+              <img :src="mediaUrl(comment.avatar) || defaultAvatar" class="comment-avatar" alt="" />
               <div class="comment-body">
                 <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
                 <span class="comment-text">{{ comment.content }}</span>
@@ -136,7 +136,7 @@
           <div class="share-friend-list">
             <div v-if="friends.length === 0" class="share-no-friends">你还没有好友，快去添加好友吧</div>
             <div v-for="f in friends" :key="f.id" class="share-friend-row" @click="doShare(f)">
-              <img :src="f.avatar || defaultAvatar" />
+              <img :src="mediaUrl(f.avatar) || defaultAvatar" />
               <span>{{ f.username }}</span>
             </div>
           </div>
@@ -169,6 +169,7 @@ import { sendMessage } from '../api/message'
 import SlideVerticalInfinite from './SlideVerticalInfinite.vue'
 import BaseVideo from './BaseVideo.vue'
 import { on, off, emit, EVENT_KEY } from '../utils/bus'
+import { mediaUrl } from '../utils/media'
 
 const router = useRouter()
 const route = useRoute()
@@ -215,14 +216,15 @@ const getData = async (refresh = false) => {
 }
 
 const fetchApi = async (page) => {
-  const uid = props.userId || userStore.user?.id || 1
-  if (props.apiType === 'friends') {
-    hasMore.value = false  // 朋友作品不分页，先关掉防止重复请求
-    return await getFriendsWorks(uid)
-  }
-  if (props.apiType === 'following') {
-    hasMore.value = false  // 关注作品不分页，先关掉防止重复请求
-    return await getFollowingWorks(uid)
+  // 关注/朋友是个人数据，未登录时不发请求（后端也会拒，这里避免无意义的 401）
+  if (props.apiType === 'friends' || props.apiType === 'following') {
+    hasMore.value = false  // 这两类不分页，关掉防止重复请求
+    if (!userStore.isLoggedIn) {
+      return { code: 200, data: [] }
+    }
+    return props.apiType === 'friends'
+      ? await getFriendsWorks()
+      : await getFollowingWorks()
   }
   return getWorks(page, pageSize, true, randomSeed.value)
 }

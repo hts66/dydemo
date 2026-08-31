@@ -14,7 +14,7 @@
       </div>
       <div class="profile-info" @click.stop>
         <div class="avatar-wrapper" @click.stop="openEditModal" v-if="userStore.isLoggedIn">
-          <img :src="userStore.user?.avatar || defaultAvatar" class="avatar-img" />
+          <img :src="mediaUrl(userStore.user?.avatar) || defaultAvatar" class="avatar-img" />
           <div class="avatar-edit-hint">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">
               <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z"/>
@@ -121,7 +121,7 @@
             @click.stop="toggleSelectItem(work.id)"
           />
           <div class="work-thumbnail">
-            <img :src="work.thumbnail || work.url" />
+            <img :src="mediaUrl(work.thumbnail || work.url)" />
             <div class="play-overlay">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
                 <path d="M8 5v14l11-7z"/>
@@ -170,7 +170,7 @@
             @click.stop="toggleSelectItem(work.id)"
           />
           <div class="work-thumbnail">
-            <img :src="work.thumbnail || work.url" />
+            <img :src="mediaUrl(work.thumbnail || work.url)" />
             <div class="play-overlay">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
                 <path d="M8 5v14l11-7z"/>
@@ -209,7 +209,7 @@
             :checked="selectedItems.includes(user.id)"
             @click.stop="toggleSelectItem(user.id)"
           />
-          <img :src="user.avatar || defaultAvatar" class="user-avatar" />
+          <img :src="mediaUrl(user.avatar) || defaultAvatar" class="user-avatar" />
           <div class="user-info">
             <span class="user-name">{{ user.username || '匿名用户' }}</span>
             <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
@@ -229,7 +229,7 @@
 
       <div v-if="activeTab === 'followers'" class="user-list">
         <div v-for="user in followerList" :key="user.id" class="user-item" @click="goToProfile(user.id)">
-          <img :src="user.avatar || defaultAvatar" class="user-avatar" />
+          <img :src="mediaUrl(user.avatar) || defaultAvatar" class="user-avatar" />
           <div class="user-info">
             <span class="user-name">{{ user.username || '匿名用户' }}</span>
             <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
@@ -248,8 +248,8 @@
           <div class="video-section">
             <video
               ref="videoPlayer"
-              :src="getProxyUrl(currentVideo.url)"
-              :poster="currentVideo.thumbnail"
+              :src="mediaUrl(currentVideo.url)"
+              :poster="mediaUrl(currentVideo.thumbnail)"
               class="modal-video"
               controls
               autoplay
@@ -264,7 +264,7 @@
                 :class="{ followed: currentVideo.isFollowing }"
                 @click.stop="handleFollow(currentVideo.userId)"
               >
-                <img :src="currentVideo.avatar || defaultAvatar" />
+                <img :src="mediaUrl(currentVideo.avatar) || defaultAvatar" />
                 <svg v-if="!currentVideo.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                   <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                 </svg>
@@ -301,7 +301,7 @@
                       <p>你还没有好友，快去添加好友吧</p>
                     </div>
                     <div v-for="friend in friends" :key="friend.id" class="share-friend-item" @click="shareToFriend(friend)">
-                      <img :src="friend.avatar || defaultAvatar" />
+                      <img :src="mediaUrl(friend.avatar) || defaultAvatar" />
                       <span>{{ friend.username }}</span>
                     </div>
                   </div>
@@ -328,7 +328,7 @@
           <div class="avatar-edit-section">
             <label class="avatar-edit-label">头像</label>
             <div class="avatar-edit-wrapper" @click="triggerAvatarUpload">
-              <img :src="editForm.avatar || defaultAvatar" class="avatar-edit-img" />
+              <img :src="mediaUrl(editForm.avatar) || defaultAvatar" class="avatar-edit-img" />
               <div class="avatar-edit-overlay">
                 <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff">
                   <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z"/>
@@ -418,7 +418,7 @@
             <p class="upload-hint">支持 jpg、png、gif 格式</p>
           </div>
           <div v-if="previewBackground" class="background-preview">
-            <img :src="previewBackground" />
+            <img :src="mediaUrl(previewBackground)" />
             <div class="bg-actions">
               <button class="bg-confirm-btn" @click.stop="confirmBackground">确认更换</button>
             </div>
@@ -440,6 +440,7 @@ import { getLikedWorks, toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { sendMessage } from '../api/message'
 import { updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
 import request from '../utils/request'
+import { mediaUrl } from '../utils/media'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -556,7 +557,7 @@ const headerStyle = computed(() => {
     height: headerHeight.value + 'px'
   }
   if (currentBackground.value) {
-    styles.backgroundImage = `url(${currentBackground.value})`
+    styles.backgroundImage = `url(${mediaUrl(currentBackground.value)})`
     styles.backgroundSize = 'cover'
     styles.backgroundPosition = 'center'
     styles.backgroundRepeat = 'no-repeat'
@@ -735,14 +736,6 @@ const loadLikedWorks = async (reset = false) => {
   } finally {
     likedLoading.value = false
   }
-}
-
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/video/proxy?url=${encodeURIComponent(url)}`
-  }
-  return url
 }
 
 const handleLike = async () => {

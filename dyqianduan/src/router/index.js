@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '../components/MainLayout.vue'
+import { useUserStore } from '../stores/user'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -44,6 +45,7 @@ const router = createRouter({
     {
       path: '/friends',
       component: MainLayout,
+      meta: { requiresAuth: true },
       children: [
         {
           path: '',
@@ -55,6 +57,7 @@ const router = createRouter({
     {
       path: '/following',
       component: MainLayout,
+      meta: { requiresAuth: true },
       children: [
         {
           path: '',
@@ -108,8 +111,13 @@ const router = createRouter({
   ],
 })
 
-// 全局前置守卫：浏览器刷新（首次导航，from 为空）时，推荐/关注/朋友界面重定向到精选界面
 router.beforeEach((to, from, next) => {
+  // 关注/朋友是个人数据，未登录先去登录页，登录成功后跳回
+  if (to.matched.some((r) => r.meta?.requiresAuth) && !useUserStore().isLoggedIn) {
+    next({ path: '/login', query: { redirect: to.fullPath } })
+    return
+  }
+  // 浏览器刷新（首次导航，from 为空）时，推荐/关注/朋友界面重定向到精选界面
   if (from.matched.length === 0 && ['/recommend', '/following', '/friends'].includes(to.path)) {
     next('/featured')
   } else {

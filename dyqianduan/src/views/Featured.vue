@@ -10,7 +10,7 @@
       >
         <div class="video-thumbnail">
           <img 
-            :src="work.thumbnail || work.url" 
+            :src="mediaUrl(work.thumbnail || work.url)" 
             :alt="work.title" 
             @error="handleThumbnailError($event, work)"
           />
@@ -32,7 +32,7 @@
                 :class="{ followed: work.isFollowing }"
                 @click.stop="handleFollow(work)"
               >
-                <img :src="work.avatar || defaultAvatar" @click.stop="goToProfile(work.userId)" />
+                <img :src="mediaUrl(work.avatar) || defaultAvatar" @click.stop="goToProfile(work.userId)" />
                 <svg v-if="!work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                   <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                 </svg>
@@ -78,6 +78,7 @@ import { useUserStore } from '../stores/user'
 import { getWorks } from '../api/work'
 import { toggleFollow, checkIsFollowing } from '../api/follow'
 import VideoPlayerModal from '../components/VideoPlayerModal.vue'
+import { mediaUrl } from '../utils/media'
 
 const router = useRouter()
 const route = useRoute()
@@ -143,7 +144,7 @@ const handleScroll = (event) => {
 const handleThumbnailError = (event, work) => {
   const img = event.target
   if (work.url) {
-    img.src = `/api/video/proxy?url=${encodeURIComponent(work.url)}`
+    img.src = mediaUrl(work.url)
   } else {
     img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"%3E%3Crect fill="%232a2a2a" width="400" height="300"/%3E%3Ctext fill="%23666" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3E视频加载失败%3C/text%3E%3C/svg%3E'
   }

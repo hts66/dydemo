@@ -82,6 +82,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { on, off, emit, EVENT_KEY } from '../utils/bus'
+import { mediaUrl } from '../utils/media'
 
 const props = defineProps({
   item: {
@@ -112,31 +113,18 @@ let unmuteClickHandler = null  // 自动播放被阻止时的一次性恢复声�
 
 // Derive id and src from item prop
 const videoId = computed(() => props.item?.id)
-const videoSrc = computed(() => {
-  const url = props.item?.url || ''
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/video/proxy?url=${encodeURIComponent(url)}`
-  }
-  return url
-})
+const videoSrc = computed(() => mediaUrl(props.item?.url))
 const thumbnailError = ref(false)
 
 const thumbnailSrc = computed(() => {
   if (thumbnailError.value) return ''
   const thumb = props.item?.thumbnail
-  if (thumb) {
-    // 外部URL走代理，避免CORS/跨域问题
-    if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
-      return `/api/video/proxy?url=${encodeURIComponent(thumb)}`
-    }
-    return thumb
-  }
+  if (thumb) return mediaUrl(thumb)
   // 回退：尝试从视频URL推导封面URL
   const url = props.item?.url || ''
   if (url) {
     const derived = url.replace('/videos/', '/images/').replace('.mp4', '.jpg')
-    if (derived !== url) return derived
+    if (derived !== url) return mediaUrl(derived)
   }
   return ''
 })

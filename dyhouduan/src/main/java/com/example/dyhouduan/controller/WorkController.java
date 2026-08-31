@@ -97,11 +97,16 @@ public class WorkController {
     }
 
     /**
-     * 获取朋友视频列表
+     * 获取当前登录用户的朋友（互关）视频列表
+     * userId 只取自 token，不接受外部传入，避免越权查看他人社交关系
      */
-    @GetMapping("/friends/{userId}")
-    public Response<List<Work>> getFriendsWorks(@PathVariable Long userId) {
+    @GetMapping("/my/friends")
+    public Response<List<Work>> getMyFriendsWorks(HttpServletRequest request) {
         try {
+            Long userId = getUserIdFromToken(request);
+            if (userId == null) {
+                return Response.error(401, "未登录");
+            }
             List<Map<String, Object>> friends = followService.getMutualFriends(userId);
             if (friends.isEmpty()) {
                 return Response.success(new ArrayList<>());
@@ -119,11 +124,16 @@ public class WorkController {
     }
 
     /**
-     * 获取关注用户视频列表
+     * 获取当前登录用户的关注视频列表
+     * userId 只取自 token，不接受外部传入，避免越权查看他人社交关系
      */
-    @GetMapping("/following/{userId}")
-    public Response<List<Work>> getFollowingWorks(@PathVariable Long userId) {
+    @GetMapping("/my/following")
+    public Response<List<Work>> getMyFollowingWorks(HttpServletRequest request) {
         try {
+            Long userId = getUserIdFromToken(request);
+            if (userId == null) {
+                return Response.error(401, "未登录");
+            }
             List<Map<String, Object>> following = followService.getFollowingList(userId);
             if (following.isEmpty()) {
                 return Response.success(new ArrayList<>());

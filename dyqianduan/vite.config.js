@@ -26,6 +26,12 @@ export default defineConfig({
         changeOrigin: true,
         timeout: 120000,
       },
+      // 媒体资源直连 MinIO，不经后端。生产环境由 nginx 承担同样的转发。
+      '/media': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/media/, '/dydemo'),
+      },
     },
   },
 })

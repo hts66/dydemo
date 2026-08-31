@@ -24,7 +24,7 @@
           :class="{ 'avatar-editable': isOwnProfile }"
           @click.stop="isOwnProfile && triggerAvatarUpload()"
         >
-          <img :src="previewAvatar || targetUser?.avatar || defaultAvatar" class="avatar-img" />
+          <img :src="previewAvatar || mediaUrl(targetUser?.avatar) || defaultAvatar" class="avatar-img" />
           <div v-if="isOwnProfile" class="avatar-edit-overlay">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff">
               <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
@@ -106,7 +106,7 @@
           @click="openVideo(work)"
         >
           <div class="work-thumbnail">
-            <img :src="work.thumbnail || work.url" />
+            <img :src="mediaUrl(work.thumbnail || work.url)" />
             <div class="play-overlay">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
                 <path d="M8 5v14l11-7z"/>
@@ -138,7 +138,7 @@
           class="user-item"
           @click="goToProfile(user.id)"
         >
-          <img :src="user.avatar || defaultAvatar" class="user-avatar" />
+          <img :src="mediaUrl(user.avatar) || defaultAvatar" class="user-avatar" />
           <div class="user-info">
             <span class="user-name">{{ user.username || '匿名用户' }}</span>
             <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
@@ -156,7 +156,7 @@
           class="user-item"
           @click="goToProfile(user.id)"
         >
-          <img :src="user.avatar || defaultAvatar" class="user-avatar" />
+          <img :src="mediaUrl(user.avatar) || defaultAvatar" class="user-avatar" />
           <div class="user-info">
             <span class="user-name">{{ user.username || '匿名用户' }}</span>
             <span class="user-bio">{{ user.bio || '这个人很懒' }}</span>
@@ -198,7 +198,7 @@
             <p class="upload-hint">支持 jpg、png、gif 格式</p>
           </div>
           <div v-if="previewBackground" class="background-preview">
-            <img :src="previewBackground" />
+            <img :src="mediaUrl(previewBackground)" />
             <div class="bg-actions">
               <button class="bg-confirm-btn" @click.stop="confirmBackground">确认更换</button>
             </div>
@@ -219,6 +219,7 @@ import { getFollowList, toggleFollow, checkIsFollowing } from '../api/follow'
 import { getUserById, updateBackground, updateAvatar, updateBackgroundFile } from '../api/user'
 import VideoPlayerModal from '../components/VideoPlayerModal.vue'
 import { emit, EVENT_KEY } from '../utils/bus'
+import { mediaUrl } from '../utils/media'
 
 const router = useRouter()
 const route = useRoute()
@@ -380,7 +381,7 @@ const headerStyle = computed(() => {
     height: headerHeight.value + 'px'
   }
   if (currentBackground.value) {
-    styles.backgroundImage = `url(${currentBackground.value})`
+    styles.backgroundImage = `url(${mediaUrl(currentBackground.value)})`
     styles.backgroundSize = 'cover'
     styles.backgroundPosition = 'center'
     styles.backgroundRepeat = 'no-repeat'

@@ -10,7 +10,7 @@
       >
         <div class="video-thumbnail">
           <img
-            :src="work.thumbnail || work.url"
+            :src="mediaUrl(work.thumbnail || work.url)"
             :alt="work.title"
             @error="handleThumbnailError($event, work)"
           />
@@ -32,7 +32,7 @@
                 :class="{ followed: work.isFollowing }"
                 @click.stop="handleFollowCard(work)"
               >
-                <img :src="work.avatar || defaultAvatar" @click.stop="goToProfile(work.userId)" />
+                <img :src="mediaUrl(work.avatar) || defaultAvatar" @click.stop="goToProfile(work.userId)" />
                 <svg v-if="!work.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                   <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                 </svg>
@@ -75,8 +75,8 @@
           <div class="video-section">
             <video
               ref="videoPlayer"
-              :src="getProxyUrl(currentVideo.url)"
-              :poster="currentVideo.thumbnail"
+              :src="mediaUrl(currentVideo.url)"
+              :poster="mediaUrl(currentVideo.thumbnail)"
               class="modal-video"
               controls
               loop
@@ -94,7 +94,7 @@
                 :class="{ followed: currentVideo.isFollowing }"
                 @click.stop="handleFollow"
               >
-                <img :src="currentVideo.avatar || defaultAvatar" @click.stop="goToProfile(currentVideo.userId)" />
+                <img :src="mediaUrl(currentVideo.avatar) || defaultAvatar" @click.stop="goToProfile(currentVideo.userId)" />
                 <svg v-if="!currentVideo.isFollowing" viewBox="0 0 24 24" width="14" height="14" fill="#fff">
                   <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                 </svg>
@@ -142,7 +142,7 @@
                       class="share-friend-item"
                       @click="shareToFriend(friend)"
                     >
-                      <img :src="friend.avatar || defaultAvatar" />
+                      <img :src="mediaUrl(friend.avatar) || defaultAvatar" />
                       <span>{{ friend.username }}</span>
                     </div>
                   </div>
@@ -154,7 +154,7 @@
               <h4 class="comments-title">评论</h4>
               <div class="comments-list">
                 <div v-for="comment in comments" :key="comment.id" class="comment-item">
-                  <img :src="comment.avatar || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
+                  <img :src="mediaUrl(comment.avatar) || defaultAvatar" class="comment-avatar" @click.stop="goToProfile(comment.userId)" />
                   <div class="comment-content">
                     <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
                     <span class="comment-text">{{ comment.content }}</span>
@@ -195,19 +195,12 @@ import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { toggleFollow, checkIsFollowing, getFriends } from '../api/follow'
 import { sendMessage } from '../api/message'
+import { mediaUrl } from '../utils/media'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
-
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/video/proxy?url=${encodeURIComponent(url)}`
-  }
-  return url
-}
 
 const keyword = ref('')
 const works = ref([])
@@ -310,7 +303,7 @@ onMounted(() => {
 const handleThumbnailError = (event, work) => {
   const img = event.target
   if (work.url) {
-    img.src = `/api/video/proxy?url=${encodeURIComponent(work.url)}`
+    img.src = mediaUrl(work.url)
   } else {
     img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"%3E%3Crect fill="%232a2a2a" width="400" height="300"/%3E%3Ctext fill="%23666" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3E视频加载失败%3C/text%3E%3C/svg%3E'
   }
