@@ -6,7 +6,6 @@ import httpx
 import logging
 
 from config import settings
-from services.tag_vocabulary import VECTOR_SIZE
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +30,10 @@ class QdrantClient:
                 log.info(f"Qdrant collection '{self.collection}' 已存在")
                 return
 
-            # 创建 collection: 128维, Cosine 距离
+            # 创建 collection: 语义 embedding 维度, Cosine 距离
             body = {
                 "vectors": {
-                    "size": VECTOR_SIZE,
+                    "size": settings.EMBEDDING_DIM,
                     "distance": "Cosine",
                 }
             }

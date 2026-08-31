@@ -50,6 +50,12 @@ vision.api-key=你的通义千问_API_Key
 vision.api-url=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 vision.model=qwen-vl-plus
 
+# ===================== 通义文本向量模型(语义检索，复用上面的 DashScope key) =====================
+embedding.api-key=${vision.api-key}
+embedding.api-url=https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+embedding.model=text-embedding-v3
+embedding.dim=1024
+
 # ===================== Qdrant 向量数据库 =====================
 qdrant.host=localhost
 qdrant.port=6333

@@ -18,13 +18,15 @@ public class VideoRecommendService {
     private final DeepSeekService deepSeekService;
     private final QdrantService qdrantService;
     private final WorkService workService;
+    private final EmbeddingService embeddingService;
     private final ObjectMapper mapper;
 
     public VideoRecommendService(DeepSeekService deepSeekService, QdrantService qdrantService,
-                                  WorkService workService) {
+                                  WorkService workService, EmbeddingService embeddingService) {
         this.deepSeekService = deepSeekService;
         this.qdrantService = qdrantService;
         this.workService = workService;
+        this.embeddingService = embeddingService;
         this.mapper = new ObjectMapper();
     }
 
@@ -41,27 +43,21 @@ public class VideoRecommendService {
      */
     public RecommendResult recommend(String userQuery, int limit) {
         try {
-            // 1. 用 DeepSeek 从用户查询中提取标签
-            List<String> tags = extractTags(userQuery);
-            log.info("用户查询: \"{}\" → 提取标签: {}", userQuery, tags);
+            // 1. 对用户查询做语义 embedding
+            float[] vector = embeddingService.embed(userQuery);
+            log.info("用户查询: \"{}\" → embedding {}", userQuery, vector != null ? "成功" : "失败");
 
-            // 2. 尝试向量搜索
+            // 2. 向量搜索
             List<QdrantService.SearchResult> vectorResults = List.of();
-            boolean vectorAttempted = false;
-
-            if (!tags.isEmpty()) {
-                float[] vector = TagVocabulary.buildVector(tags);
-                if (!isAllZero(vector)) {
-                    vectorAttempted = true;
-                    vectorResults = qdrantService.searchSimilar(vector, limit);
-                }
+            if (vector != null) {
+                vectorResults = qdrantService.searchSimilar(vector, limit);
             }
 
             // 3. 从向量搜索结果构建视频卡片
             List<VideoCard> cards = buildCards(vectorResults);
 
             // 4. 向量搜索无结果 → 降级为关键词搜索
-            if (cards.isEmpty() && (tags.isEmpty() || !vectorAttempted || vectorResults.isEmpty())) {
+            if (cards.isEmpty()) {
                 log.info("向量搜索无结果，降级为关键词搜索: \"{}\"", userQuery);
                 List<Work> keywordWorks = workService.searchWorks(userQuery, 1, limit);
                 cards = buildCardsFromWorks(keywordWorks);
@@ -74,12 +70,8 @@ public class VideoRecommendService {
                     "为你找到了 " + cards.size() + " 个与「" + userQuery + "」相关的视频，快来看看吧~ 🎬", cards);
             }
 
-            if (cards.isEmpty()) {
-                return new RecommendResult("抱歉，没有找到匹配的视频，换个关键词试试吧~", List.of());
-            }
-
             // 5. 生成友好的回复（向量搜索有结果）
-            String reply = buildReply(tags, cards);
+            String reply = "为你找到了 %d 个与「%s」相关的视频，快来看看吧~ 🎬".formatted(cards.size(), userQuery);
             return new RecommendResult(reply, cards);
 
         } catch (Exception e) {

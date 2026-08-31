@@ -21,7 +21,11 @@ public class QdrantService {
     private final ObjectMapper mapper;
     private final HttpClient httpClient;
 
-    public static final String COLLECTION_VIDEO_TAGS = "video_tags";
+    // 存储语义 embedding 向量的 collection（1024 维），与旧的 128 维标签向量库区分
+    public static final String COLLECTION_VIDEO_TAGS = "video_embeddings";
+
+    // 向量维度：需与 embedding.dim（通义 text-embedding-v3 = 1024）保持一致
+    public static final int VECTOR_SIZE = 1024;
 
     private boolean collectionEnsured = false;
 
@@ -66,7 +70,7 @@ public class QdrantService {
 
         // 创建 collection
         Map<String, Object> body = new HashMap<>();
-        body.put("vectors", Map.of("size", TagVocabulary.VECTOR_SIZE, "distance", "Cosine"));
+        body.put("vectors", Map.of("size", VECTOR_SIZE, "distance", "Cosine"));
         String json = mapper.writeValueAsString(body);
 
         HttpRequest putReq = apiRequest(config.getBaseUrl() + "/collections/" + COLLECTION_VIDEO_TAGS)
@@ -216,7 +220,7 @@ public class QdrantService {
                 var result = root.get("result");
                 if (result != null && result.has("vector")) {
                     var vecNode = result.get("vector");
-                    float[] vec = new float[TagVocabulary.VECTOR_SIZE];
+                    float[] vec = new float[VECTOR_SIZE];
                     if (vecNode.isArray()) {
                         for (int i = 0; i < Math.min(vecNode.size(), vec.length); i++) {
                             vec[i] = vecNode.get(i).floatValue();

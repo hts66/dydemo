@@ -27,10 +27,12 @@ import java.util.*;
 public class VideoTagService {
 
     private final DeepSeekService deepSeekService;
+    private final EmbeddingService embeddingService;
     private final ObjectMapper mapper;
 
-    public VideoTagService(DeepSeekService deepSeekService) {
+    public VideoTagService(DeepSeekService deepSeekService, EmbeddingService embeddingService) {
         this.deepSeekService = deepSeekService;
+        this.embeddingService = embeddingService;
         this.mapper = new ObjectMapper();
     }
 
@@ -109,7 +111,7 @@ public class VideoTagService {
         if (tags.isEmpty()) {
             tags = extractTagsFromText(title, desc);
         }
-        float[] vector = TagVocabulary.buildVector(tags);
+        float[] vector = embeddingService.embed(buildEmbedText(title, desc, tags));
 
         log.info("🖼️ 封面分析 workId={}: {} → {} 标签", workId,
                 title.length() > 30 ? title.substring(0, 30) + "..." : title, tags);
@@ -193,7 +195,7 @@ public class VideoTagService {
         if (tags.isEmpty()) {
             tags = extractTagsFromText(title, desc);
         }
-        float[] vector = TagVocabulary.buildVector(tags);
+        float[] vector = embeddingService.embed(buildEmbedText(title, desc, tags));
 
         log.info("📝 文本分析 workId={}: → {} 标签", workId, tags);
         return new TagResult(tags, vector, response, "text");
@@ -258,6 +260,16 @@ public class VideoTagService {
             }
         }
         return found;
+    }
+
+    /** 构建用于 embedding 的文本：标题 + 描述 + 视觉标签，融合文本与画面语义 */
+    private String buildEmbedText(String title, String desc, List<String> tags) {
+        StringBuilder sb = new StringBuilder();
+        if (title != null && !title.isBlank()) sb.append(title).append(' ');
+        if (desc != null && !desc.isBlank() && !desc.equals(title)) sb.append(desc).append(' ');
+        if (tags != null && !tags.isEmpty()) sb.append(String.join(" ", tags));
+        String text = sb.toString().trim();
+        return text.isEmpty() ? "视频" : text;
     }
 
     // ==================== 通用: 解析标签 ====================

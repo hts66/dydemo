@@ -11,6 +11,7 @@ from langchain_core.tools import tool
 from config import settings
 from services.tag_vocabulary import build_vector, all_tags_for_prompt, TAG_MAP
 from services.qdrant_client import qdrant_client
+from services.embedding_client import embed
 
 log = logging.getLogger(__name__)
 
@@ -46,30 +47,23 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
                 pass
         log.info(f"推荐请求: '{query}' limit={limit} exclude={excluded}")
 
-        # 1. 用 DeepSeek 提取标签
-        tags = await _extract_tags(query)
-        log.info(f"标签提取: '{query}' → {tags}")
-        if not tags:
+        # 1. 对查询做语义 embedding
+        vector = await embed(query)
+        if not vector:
             return json.dumps({
                 "found": False,
                 "message": f"没有找到与「{query}」相关的视频，换个关键词试试吧~",
                 "videos": []
             }, ensure_ascii=False)
 
-        # 2. Qdrant 标签硬过滤
-        vector = build_vector(tags)
-        valid_tags = [t for t in tags if t in TAG_MAP]
-        must_clauses = [{"key": "tags", "match": {"text": t}} for t in valid_tags]
-        filter_obj = {"must": must_clauses}
-        vector_results = await qdrant_client.search_similar(
-            vector, 200, filter_obj=filter_obj
-        )
-        log.info(f"硬过滤({valid_tags}): {len(vector_results)} 条")
+        # 2. Qdrant 语义向量检索（多取一些，供排除已看 + 随机采样）
+        vector_results = await qdrant_client.search_similar(vector, max(limit * 4, 20))
+        log.info(f"语义检索: '{query}' → {len(vector_results)} 条")
 
         if not vector_results:
             return json.dumps({
                 "found": False,
-                "message": f"没有找到「{'、'.join(tags)}」相关的视频，换个关键词试试吧~",
+                "message": f"没有找到与「{query}」相关的视频，换个关键词试试吧~",
                 "videos": []
             }, ensure_ascii=False)
 
@@ -87,11 +81,9 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
         available = [v for v in all_videos if v["id"] not in excluded]
 
         if not available:
-            tag_str = "、".join(tags)
             return json.dumps({
                 "found": False,
-                "message": f"「{tag_str}」的视频看完啦，试试其他类型吧~ 😊",
-                "tags": tags,
+                "message": f"「{query}」相关的视频看完啦，试试其他类型吧~ 😊",
                 "videos": [],
             }, ensure_ascii=False)
 
@@ -100,16 +92,14 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
         else:
             videos = available
 
-        tag_str = "、".join(tags)
         if excluded:
-            message = f"为你换了一批「{tag_str}」视频，共 {len(videos)} 个，快来看看吧~ 🎬"
+            message = f"为你换了一批「{query}」相关的视频，共 {len(videos)} 个，快来看看吧~ 🎬"
         else:
-            message = f"为你找到了 {len(videos)} 个「{tag_str}」视频，快来看看吧~ 🎬"
+            message = f"为你找到了 {len(videos)} 个「{query}」相关的视频，快来看看吧~ 🎬"
 
         return json.dumps({
             "found": True,
             "message": message,
-            "tags": tags,
             "videos": videos,
         }, ensure_ascii=False)
 
