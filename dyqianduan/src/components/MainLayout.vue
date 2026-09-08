@@ -100,6 +100,7 @@
                 <div v-for="friend in friends" :key="friend.id" class="friend-item" @click.stop="openChat(friend)">
                   <img :src="mediaUrl(friend.avatar) || defaultAvatar" />
                   <span class="friend-name">{{ friend.username }}</span>
+                  <span v-if="unreadCounts[friend.id]" class="unread-badge">{{ unreadCounts[friend.id] > 99 ? '99+' : unreadCounts[friend.id] }}</span>
                 </div>
               </div>
             </div>
@@ -153,6 +154,7 @@
           >
             <img :src="mediaUrl(friend.avatar) || defaultAvatar" />
             <span class="chat-sidebar-name">{{ friend.username }}</span>
+            <span v-if="unreadCounts[friend.id]" class="unread-badge">{{ unreadCounts[friend.id] > 99 ? '99+' : unreadCounts[friend.id] }}</span>
           </div>
         </div>
       </div>
@@ -161,6 +163,12 @@
           <div class="chat-user-info">
             <img :src="mediaUrl(currentChatFriend?.avatar) || defaultAvatar" />
             <span class="chat-username">{{ currentChatFriend?.username }}</span>
+            <span
+              v-if="currentChatFriend?.id !== AI_BOT.id"
+              class="conn-dot"
+              :class="{ online: wsConnected }"
+              :title="wsConnected ? '实时连接正常' : '连接断开，重连中'"
+            ></span>
           </div>
           <div class="chat-header-actions">
             <button
@@ -190,7 +198,7 @@
               <img :src="msg.senderId === userStore.user?.id ? (mediaUrl(userStore.user?.avatar) || defaultAvatar) : (mediaUrl(msg.senderAvatar) || defaultAvatar)" class="msg-avatar" />
               <div class="msg-content">
                 <template v-if="msg.isRecommend">
-                  <div class="recommend-text">{{ msg.content.text }}</div>
+                  <div class="recommend-text">{{ msg.content?.text || msg.content }}</div>
                   <div class="recommend-video-list">
                     <div
                       v-for="video in msg.recommendVideos"
@@ -222,7 +230,7 @@
                     </div>
                   </div>
                 </template>
-                <span v-else class="msg-text">{{ msg.content }}</span>
+                <span v-else class="msg-text">{{ msg.statusText || msg.content }}</span>
                 <span class="msg-time">{{ formatMsgTime(msg.createdAt) }}</span>
               </div>
             </div>
@@ -347,7 +355,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
 import { getFriends, toggleFollow, checkIsFollowing } from '../api/follow'
@@ -357,6 +365,7 @@ import { toggleLike, isLiked as checkIsLiked } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import request from '../utils/request'
 import { mediaUrl } from '../utils/media'
+import { connectWs, onWsMessage } from '../utils/ws'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -465,6 +474,7 @@ const openChat = async (friend) => {
   showChat.value = true
   chatMessages.value = []
   chatInput.value = ''
+  unreadCounts.value[friend.id] = 0
   
   if (userStore.user?.id) {
     try {
@@ -487,6 +497,60 @@ const closeChat = () => {
   chatMessages.value = []
   chatInput.value = ''
 }
+
+// ===== 实时聊天：WebSocket 推送接收 =====
+let offWsMessage = null
+const wsConnected = ref(false)
+// 未读消息计数：{ 好友id: 未读条数 }，点开聊天窗清零
+const unreadCounts = ref({})
+
+onMounted(() => {
+  if (localStorage.getItem('token')) {
+    connectWs()
+  }
+  offWsMessage = onWsMessage((data) => {
+    // 连接状态变化：控制聊天窗头部的状态圆点
+    if (data.type === 'ws_open') {
+      wsConnected.value = true
+      // 断线重连成功：刷新当前聊天窗口，补齐断线期间的消息
+      if (currentChatFriend.value && currentChatFriend.value.id !== AI_BOT.id) {
+        getChatMessages(currentChatFriend.value.id)
+          .then((result) => {
+            if (result.code === 200) {
+              chatMessages.value = result.data
+              nextTick(() => scrollToBottom())
+            }
+          })
+          .catch(() => {})
+      }
+      return
+    }
+    if (data.type === 'ws_close') {
+      wsConnected.value = false
+      return
+    }
+    // 收到新消息推送：正在与发送者聊天则直接插入列表，否则累计未读红点
+    if (data.type === 'new_message' && data.message) {
+      const msg = data.message
+      if (currentChatFriend.value && currentChatFriend.value.id === msg.senderId) {
+        chatMessages.value.push({
+          id: msg.id,
+          content: msg.content,
+          senderId: msg.senderId,
+          senderUsername: msg.senderUsername || currentChatFriend.value.username,
+          senderAvatar: msg.senderAvatar || currentChatFriend.value.avatar || defaultAvatar,
+          createdAt: msg.createdAt
+        })
+        nextTick(() => scrollToBottom())
+      } else {
+        unreadCounts.value[msg.senderId] = (unreadCounts.value[msg.senderId] || 0) + 1
+      }
+    }
+  })
+})
+onUnmounted(() => {
+  if (offWsMessage) offWsMessage()
+})
 
 const sendChatMessage = async () => {
   if (!chatInput.value.trim() || !currentChatFriend.value || !userStore.user?.id) return
@@ -527,32 +591,104 @@ const sendChatMessage = async () => {
         requestBody.thread_id = threadId.value
       }
 
-      const botResult = await request.post('/chat/agent', requestBody)
-      if (botResult.code === 200) {
-        const isRecommend = botResult.data && botResult.data.type === 'recommend'
-        const replyText = botResult.data.text || ''
+      // 创建流式占位消息（token 逐步追加）
+      chatMessages.value.push({
+        id: Date.now() + 1,
+        content: '',
+        senderId: AI_BOT.id,
+        senderUsername: AI_BOT.username,
+        senderAvatar: AI_BOT.avatar,
+        createdAt: new Date().toISOString(),
+        streaming: true,
+        statusText: '',
+      })
+      const botMsg = chatMessages.value[chatMessages.value.length - 1]
+      await nextTick()
+      scrollToBottom()
 
-        // 保存 thread_id 用于后续持续对话
-        if (botResult.data.thread_id) {
-          threadId.value = botResult.data.thread_id
-        }
-
-        const botMsg = {
-          id: Date.now() + 1,
-          content: replyText,
-          senderId: AI_BOT.id,
-          senderUsername: AI_BOT.username,
-          senderAvatar: AI_BOT.avatar,
-          createdAt: new Date().toISOString(),
-          isRecommend: isRecommend,
-          recommendVideos: isRecommend ? botResult.data.videos : null
-        }
-        chatMessages.value.push(botMsg)
-        // 后台持久化AI回复（推荐类消息只存文本部分）
-        saveBotMessage(replyText).catch(() => {})
-        await nextTick()
-        scrollToBottom()
+      const STATUS_MAP = {
+        recommend_videos: '正在为你找视频...',
+        search_videos_by_keyword: '正在搜索视频...',
+        get_hot_videos: '正在看看最近的热门...',
       }
+      const finishStream = () => {
+        botMsg.streaming = false
+        botMsg.statusText = ''
+      }
+
+      try {
+        // 原生 fetch 消费 SSE（axios 有 10s 超时会掐断流，且需手动带 token）
+        const resp = await fetch('/api/chat/agent/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify(requestBody),
+        })
+        if (!resp.ok || !resp.body) throw new Error(`AI服务响应异常: ${resp.status}`)
+
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        const handleEvent = (rawEvent) => {
+          let eventName = ''
+          let dataStr = ''
+          for (const line of rawEvent.split('\n')) {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim()
+            else if (line.startsWith('data:')) dataStr += line.slice(5).trim()
+          }
+          if (!eventName || !dataStr) return
+          let data
+          try { data = JSON.parse(dataStr) } catch (_) { return }
+
+          if (eventName === 'meta') {
+            if (data.thread_id) threadId.value = data.thread_id
+          } else if (eventName === 'status') {
+            botMsg.statusText = STATUS_MAP[data.tool] || '正在思考...'
+          } else if (eventName === 'token') {
+            botMsg.statusText = ''
+            botMsg.content += data.text || ''
+            nextTick(() => scrollToBottom())
+          } else if (eventName === 'videos') {
+            botMsg.isRecommend = true
+            botMsg.recommendVideos = data.videos || []
+            nextTick(() => scrollToBottom())
+          } else if (eventName === 'done') {
+            if (data.text) botMsg.content = data.text
+            finishStream()
+            // 后台持久化AI回复（推荐类消息只存文本部分）
+            saveBotMessage(botMsg.content).catch(() => {})
+          } else if (eventName === 'error') {
+            botMsg.content = data.message || '抱歉，我暂时无法回答你的问题。'
+            finishStream()
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let sep
+          while ((sep = buf.indexOf('\n\n')) >= 0) {
+            const rawEvent = buf.slice(0, sep)
+            buf = buf.slice(sep + 2)
+            handleEvent(rawEvent)
+          }
+        }
+        // 处理结尾未以空行结束的残留事件
+        if (buf.trim()) handleEvent(buf)
+      } catch (err) {
+        console.error('AI流式对话失败', err)
+        if (!botMsg.content) {
+          botMsg.content = '抱歉，我暂时无法回答你的问题。'
+        }
+      } finally {
+        finishStream()
+      }
+      await nextTick()
+      scrollToBottom()
       return
     }
 
@@ -1226,6 +1362,35 @@ const scrollSharedCommentsToBottom = () => {
 .chat-sidebar-name {
   font-size: 13px;
   color: #fff;
+}
+
+/* 未读消息红点徽标（好友弹窗列表与聊天侧栏共用） */
+.unread-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #fe2c55;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* 聊天窗头部实时连接状态圆点 */
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+  margin-left: 2px;
+  transition: background 0.3s;
+}
+
+.conn-dot.online {
+  background: #2ed573;
 }
 
 .chat-main {

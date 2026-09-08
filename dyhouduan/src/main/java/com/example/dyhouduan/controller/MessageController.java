@@ -4,12 +4,15 @@ import com.example.dyhouduan.dto.Response;
 import com.example.dyhouduan.entity.Message;
 import com.example.dyhouduan.service.MessageService;
 import com.example.dyhouduan.utils.JwtUtil;
+import com.example.dyhouduan.websocket.ChatSessionRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -21,6 +24,12 @@ public class MessageController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private ChatSessionRegistry chatSessionRegistry;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @GetMapping("/chat/{otherUserId}")
     public Response<List<Message>> getChatMessages(@PathVariable Long otherUserId, HttpServletRequest request) {
@@ -47,6 +56,8 @@ public class MessageController {
             }
             Message message = messageService.sendMessage(userId, request.getReceiverId(), request.getContent());
             log.info("用户[{}]向用户[{}]发送消息：{}", userId, request.getReceiverId(), request.getContent());
+            // 接收方在线则实时推送（推送失败不影响发送结果）
+            pushNewMessage(request.getReceiverId(), message.getId());
             return Response.success(message);
         } catch (Exception e) {
             log.error("发送消息失败", e);
@@ -77,6 +88,22 @@ public class MessageController {
         public void setReceiverId(Long receiverId) { this.receiverId = receiverId; }
         public String getContent() { return content; }
         public void setContent(String content) { this.content = content; }
+    }
+
+    /**
+     * 向在线接收方推送新消息通知（WebSocket）
+     */
+    private void pushNewMessage(Long receiverId, Long messageId) {
+        try {
+            Message detail = messageService.getMessageDetail(messageId);
+            String payload = objectMapper.writeValueAsString(Map.of(
+                    "type", "new_message",
+                    "message", detail != null ? detail : messageService.getById(messageId)
+            ));
+            chatSessionRegistry.sendToUser(receiverId, payload);
+        } catch (Exception e) {
+            log.warn("实时推送消息[{}]给用户[{}]失败: {}", messageId, receiverId, e.getMessage());
+        }
     }
 
     private Long getUserIdFromToken(HttpServletRequest request) {

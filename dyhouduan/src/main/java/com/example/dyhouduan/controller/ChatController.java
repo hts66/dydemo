@@ -8,13 +8,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @RestController
@@ -25,6 +31,7 @@ public class ChatController {
     private final VideoRecommendService videoRecommendService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final ExecutorService sseExecutor;
 
     @Value("${agent.api-url:http://localhost:8000}")
     private String agentApiUrl;
@@ -43,9 +50,10 @@ public class ChatController {
         this.videoRecommendService = videoRecommendService;
         this.objectMapper = new ObjectMapper();
         this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(Duration.ofSeconds(30))
-                .build();
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .connectTimeout(Duration.ofSeconds(30))
+                    .build();
+        this.sseExecutor = Executors.newFixedThreadPool(8);
     }
 
     @SuppressWarnings("unchecked")
@@ -152,6 +160,75 @@ public class ChatController {
             // 降级到旧逻辑
             return handleWithFallback(request);
         }
+    }
+
+    /** ===================== Agent 流式端点（SSE 透传） ===================== */
+    @PostMapping("/agent/stream")
+    public SseEmitter chatWithAgentStream(@RequestBody Map<String, Object> request) {
+        SseEmitter emitter = new SseEmitter(120_000L);
+        sseExecutor.execute(() -> {
+            try {
+                String agentUrl = agentApiUrl + "/chat/stream";
+                String jsonBody = objectMapper.writeValueAsString(request);
+
+                HttpRequest httpRequest = HttpRequest.newBuilder()
+                        .uri(URI.create(agentUrl))
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "text/event-stream")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                        .timeout(Duration.ofSeconds(110))
+                        .build();
+
+                HttpResponse<java.io.InputStream> response = httpClient.send(httpRequest,
+                        HttpResponse.BodyHandlers.ofInputStream());
+
+                if (response.statusCode() != 200) {
+                    log.warn("Agent 流式服务返回异常: {}", response.statusCode());
+                    emitter.send(SseEmitter.event().name("error")
+                            .data("{\"message\":\"抱歉，我暂时无法回答你的问题。\"}"));
+                    emitter.complete();
+                    return;
+                }
+
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                    String line;
+                    String eventName = null;
+                    StringBuilder dataBuf = new StringBuilder();
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("event:")) {
+                            eventName = line.substring(6).trim();
+                        } else if (line.startsWith("data:")) {
+                            dataBuf.append(line.substring(5).trim());
+                        } else if (line.isEmpty()) {
+                            // 空行 = 事件边界，透传给前端
+                            if (eventName != null && dataBuf.length() > 0) {
+                                objectMapper.readTree(dataBuf.toString()); // 校验 JSON 合法
+                                emitter.send(SseEmitter.event().name(eventName).data(dataBuf.toString()));
+                            }
+                            eventName = null;
+                            dataBuf.setLength(0);
+                        }
+                    }
+                    // 流意外结束时冲刷残留事件
+                    if (eventName != null && dataBuf.length() > 0) {
+                        objectMapper.readTree(dataBuf.toString());
+                        emitter.send(SseEmitter.event().name(eventName).data(dataBuf.toString()));
+                    }
+                }
+                emitter.complete();
+            } catch (Exception e) {
+                log.error("Agent 流式转发失败: {}", e.getMessage());
+                try {
+                    emitter.send(SseEmitter.event().name("error")
+                            .data("{\"message\":\"抱歉，我暂时无法回答你的问题。\"}"));
+                    emitter.complete();
+                } catch (Exception ignore) {
+                    emitter.completeWithError(e);
+                }
+            }
+        });
+        return emitter;
     }
 
     /** ===================== 重置会话端点 ===================== */

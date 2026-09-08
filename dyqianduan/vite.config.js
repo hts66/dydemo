@@ -15,11 +15,13 @@ export default defineConfig({
     },
   },
   server: {
+    host: true, // 允许手机通过局域网 IP 访问（配合真机测试实时聊天）
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         timeout: 120000,
+        ws: true,
       },
       '/uploads': {
         target: 'http://localhost:8080',

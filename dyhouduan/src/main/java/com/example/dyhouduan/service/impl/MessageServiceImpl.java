@@ -38,4 +38,9 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         save(message);
         return message;
     }
+
+    @Override
+    public Message getMessageDetail(Long id) {
+        return baseMapper.selectMessageDetail(id);
+    }
 }

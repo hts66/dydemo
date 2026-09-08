@@ -1,13 +1,15 @@
 """FastAPI 入口 — Agent 对话服务"""
 
+import json
 import logging
+import re
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from config import settings
 from models import ChatRequest, ChatResponse, HealthResponse
@@ -143,6 +145,118 @@ async def chat(request: ChatRequest):
             text="抱歉，我暂时无法回答你的问题。",
             thread_id=request.thread_id,
         )
+
+
+# ===================== 流式对话（SSE） =====================
+
+VIDEO_MARKER_RE = re.compile(r'\[VIDEOS\]\s*([\d,\s]+)\s*\[/VIDEOS\]')
+VIDEO_MARKER_START = "[VIDEOS]"
+
+
+def _sse(event: str, data: dict) -> str:
+    """格式化一条 SSE 事件"""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+class _VideoMarkerFilter:
+    """流式输出中拦截 [VIDEOS]...[/VIDEOS] 标记，防止标记泄漏给前端
+
+    原理：累计原始文本 raw，只放出"安全前缀"：
+    - 末尾若匹配 [VIDEOS] 的部分前缀（最多扣留 7 字符）则暂不发出
+    - 检测到完整起始标记后停止吐字，直到 [/VIDEOS] 闭合后提取视频ID
+    """
+
+    def __init__(self):
+        self.raw = ""
+        self.sent = 0            # raw 中已安全发出的字符数
+        self.marker_open = False  # 已见起始标记，等待闭合
+        self.done = False         # 完整标记已解析
+        self.video_ids = []
+
+    def feed(self, token: str) -> str:
+        """追加 token，返回本次可安全发出的文本"""
+        if self.done:
+            return ""
+        self.raw += token
+        text = ""
+        if not self.marker_open:
+            idx = self.raw.find(VIDEO_MARKER_START, self.sent)
+            if idx >= 0:
+                text = self.raw[self.sent:idx]
+                self.sent = idx
+                self.marker_open = True
+            else:
+                # 无完整起始标记 → 扣留末尾可能是标记前缀的部分
+                end = len(self.raw)
+                hold = min(len(VIDEO_MARKER_START) - 1, len(self.raw) - self.sent)
+                for k in range(hold, 0, -1):
+                    if self.raw.endswith(VIDEO_MARKER_START[:k]):
+                        end = len(self.raw) - k
+                        break
+                text = self.raw[self.sent:end]
+                self.sent = end
+                return text
+        # marker_open：检查是否已闭合
+        m = VIDEO_MARKER_RE.search(self.raw, self.sent)
+        if m:
+            self.done = True
+            self.video_ids = [int(x.strip()) for x in m.group(1).split(",") if x.strip().isdigit()]
+        return text
+
+    def final_text(self) -> str:
+        """流结束后的干净文本（与已发出的 token 保持一致）"""
+        return self.raw[:self.sent].strip()
+
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """Agent 流式对话接口 — SSE 输出，事件: meta/status/token/videos/done/error"""
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    if not messages:
+        raise HTTPException(status_code=400, detail="消息列表为空")
+
+    thread_id = request.thread_id or str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    async def event_gen():
+        yield _sse("meta", {"thread_id": thread_id})
+        filt = _VideoMarkerFilter()
+        full_text = ""
+        try:
+            log.info(f"收到流式对话请求 [thread={thread_id[:8]}]: {messages[-1]['content'][:50]}...")
+            async for event in agent_graph.astream_events(
+                {"messages": messages}, config=config, version="v2",
+            ):
+                kind = event["event"]
+                if kind == "on_tool_start":
+                    yield _sse("status", {"stage": "searching", "tool": event.get("name", "")})
+                elif kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    content = chunk.content if isinstance(chunk.content, str) else ""
+                    if not content:
+                        continue
+                    safe = filt.feed(content)
+                    if safe:
+                        full_text += safe
+                        yield _sse("token", {"text": safe})
+
+            video_ids = filt.video_ids
+            videos = await _fetch_video_cards(video_ids) if video_ids else []
+            if videos:
+                yield _sse("videos", {"videos": videos})
+            yield _sse("done", {
+                "text": full_text,
+                "type": "recommend" if videos else "chat",
+            })
+        except Exception as e:
+            log.error(f"流式对话处理失败: {e}", exc_info=True)
+            yield _sse("error", {"message": "抱歉，我暂时无法回答你的问题。"})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ===================== 删除会话（清空对话记忆） =====================
