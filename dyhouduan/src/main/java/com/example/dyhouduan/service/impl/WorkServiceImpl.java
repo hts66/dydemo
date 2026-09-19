@@ -15,7 +15,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 @Service
 public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements WorkService {
@@ -34,6 +39,26 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
 
     @Autowired
     private QdrantService qdrantService;
+
+    // ── 全量作品 ID 缓存：应用层洗牌用。发布/删除时主动失效，60s TTL 兜底 ──
+    private static final long ID_CACHE_TTL_MS = 60_000;
+    private volatile List<Long> allWorkIds = null;
+    private volatile long allWorkIdsCachedAt = 0;
+
+    private List<Long> getAllWorkIds() {
+        List<Long> cached = allWorkIds;
+        if (cached != null && System.currentTimeMillis() - allWorkIdsCachedAt < ID_CACHE_TTL_MS) {
+            return cached;
+        }
+        cached = baseMapper.selectAllIds();
+        allWorkIds = cached;
+        allWorkIdsCachedAt = System.currentTimeMillis();
+        return cached;
+    }
+
+    private void invalidateWorkIdCache() {
+        allWorkIds = null;
+    }
 
     private boolean useMinio() {
         return minioProperties.getEndpoint() != null && !minioProperties.getEndpoint().isEmpty();
@@ -95,7 +120,11 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
         work.setLikesCount(0);
         work.setCommentsCount(0);
         work.setViews(0);
-        return save(work);
+        boolean ok = save(work);
+        if (ok) {
+            invalidateWorkIdCache();
+        }
+        return ok;
     }
 
     @Override
@@ -109,6 +138,7 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
             work.setViews(0);
         }
         saveBatch(works);
+        invalidateWorkIdCache();
         return works.size();
     }
 
@@ -120,8 +150,39 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
 
     @Override
     public List<Work> getRandomWorks(int page, int size, int seed) {
-        int offset = (page - 1) * size;
-        return baseMapper.selectRandomWorks(offset, size, seed);
+        List<Long> ids = getAllWorkIds();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        // 确定性洗牌：复制一份后用 seed 洗牌（不污染缓存）。
+        // 同一 seed + 同一 id 列表 ⇒ 完全相同排列，保证翻页不重不漏
+        List<Long> shuffled = new ArrayList<>(ids);
+        Collections.shuffle(shuffled, new Random(seed));
+
+        int from = (page - 1) * size;
+        if (from >= shuffled.size()) {
+            return List.of();
+        }
+        List<Long> pageIds = new ArrayList<>(
+                shuffled.subList(from, Math.min(from + size, shuffled.size())));
+        if (pageIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 主键点查 + 按洗牌顺序重排（IN 不保证顺序）
+        List<Work> works = baseMapper.selectByIds(pageIds);
+        Map<Long, Work> byId = new HashMap<>();
+        for (Work w : works) {
+            byId.put(w.getId(), w);
+        }
+        List<Work> ordered = new ArrayList<>(pageIds.size());
+        for (Long id : pageIds) {
+            Work w = byId.get(id);
+            if (w != null) {
+                ordered.add(w);
+            }
+        }
+        return ordered;
     }
 
     @Override
@@ -147,6 +208,10 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
         // 同步删除 Qdrant 向量，避免 AI 推荐已删除的视频
         qdrantService.deletePoint(id);
 
-        return removeById(id);
+        boolean ok = removeById(id);
+        if (ok) {
+            invalidateWorkIdCache();
+        }
+        return ok;
     }
 }

@@ -18,14 +18,25 @@ public interface WorkMapper extends BaseMapper<Work> {
             "LIMIT #{offset}, #{limit}")
     List<Work> selectWorksWithUser(@Param("offset") int offset, @Param("limit") int limit);
 
-    @Select("SELECT w.*, u.username, u.avatar " +
+    /**
+     * 全量作品 ID（走主键索引、index-only，不回表）。
+     * 供应用层按 seed 洗牌，替代 ORDER BY RAND() 的全表扫描 + filesort。
+     */
+    @Select("SELECT id FROM works")
+    List<Long> selectAllIds();
+
+    /**
+     * 按 ID 批量取作品（主键点查 + JOIN 用户信息）。
+     * 结果不保证顺序，调用方需按洗牌顺序重排。
+     */
+    @Select("<script>" +
+            "SELECT w.*, u.username, u.avatar " +
             "FROM works w " +
             "LEFT JOIN users u ON w.user_id = u.id " +
-            "ORDER BY RAND(#{seed}) " +
-            "LIMIT #{offset}, #{limit}")
-    List<Work> selectRandomWorks(@Param("offset") int offset,
-                                 @Param("limit") int limit,
-                                 @Param("seed") int seed);
+            "WHERE w.id IN " +
+            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>" +
+            "</script>")
+    List<Work> selectByIds(@Param("ids") List<Long> ids);
 
     @Select("SELECT w.*, u.username, u.avatar " +
             "FROM works w " +
