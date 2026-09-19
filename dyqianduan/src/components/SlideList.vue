@@ -12,6 +12,7 @@
       @update:index="onIndexChange"
       @load-more="loadMore"
       @refresh="() => refreshData()"
+      @will-switch="onWillSwitch"
     >
       <template #default="{ item, index, isActive }">
         <div class="video-slide">
@@ -19,6 +20,7 @@
             <BaseVideo
               :item="item"
               :is-play="isActive"
+              :preload="isPreloadTarget(index)"
             />
 
             <!-- Bottom info: author avatar + name + title -->
@@ -187,6 +189,8 @@ const commentListRef = ref(null)
 // ── Data state ────────────────────────────────────────
 const works = ref([])
 const currentActiveIndex = ref(0)
+// 预加载中心：willSwitch 时立即更新（早于 update:index），前后各 1 个视频提前拉取数据
+const preloadCenter = ref(0)
 const isLoading = ref(false)
 const isRefreshing = ref(false)
 const currentPage = ref(1)
@@ -218,13 +222,14 @@ const getData = async (refresh = false) => {
 const fetchApi = async (page) => {
   // 关注/朋友是个人数据，未登录时不发请求（后端也会拒，这里避免无意义的 401）
   if (props.apiType === 'friends' || props.apiType === 'following') {
-    hasMore.value = false  // 这两类不分页，关掉防止重复请求
     if (!userStore.isLoggedIn) {
+      hasMore.value = false
       return { code: 200, data: [] }
     }
+    // 分页加载：page 驱动，hasMore 由 loadWorks 按返回条数自动翻转
     return props.apiType === 'friends'
-      ? await getFriendsWorks()
-      : await getFollowingWorks()
+      ? await getFriendsWorks(page, pageSize)
+      : await getFollowingWorks(page, pageSize)
   }
   return getWorks(page, pageSize, true, randomSeed.value)
 }
@@ -246,6 +251,7 @@ const refreshData = async () => {
       const newWorks = await enrichWorks(result.data)
       works.value = newWorks
       currentActiveIndex.value = 0
+      preloadCenter.value = 0
       currentPage.value = 2
 
       if (result.data.length < pageSize) {
@@ -326,7 +332,16 @@ const loadMore = () => {
 // ── Index change handler ──────────────────────────────
 const onIndexChange = (newIndex) => {
   currentActiveIndex.value = newIndex
+  preloadCenter.value = newIndex
 }
+
+// 动画开始瞬间更新预加载中心，让新视频的相邻视频提前开始缓冲
+const onWillSwitch = (targetIndex) => {
+  preloadCenter.value = targetIndex
+}
+
+// 距预加载中心 ±1 的视频提前拉取数据（滑到时秒开）
+const isPreloadTarget = (index) => Math.abs(index - preloadCenter.value) <= 1
 
 // ── Like ──────────────────────────────────────────────
 const handleLike = async (work) => {

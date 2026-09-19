@@ -68,9 +68,12 @@ public interface WorkMapper extends BaseMapper<Work> {
             "LEFT JOIN users u ON w.user_id = u.id " +
             "WHERE w.user_id IN " +
             "<foreach collection='userIds' item='userId' open='(' separator=',' close=')'>#{userId}</foreach> " +
-            "ORDER BY w.created_at DESC" +
+            "ORDER BY w.created_at DESC, w.id DESC " +
+            "LIMIT #{offset}, #{limit}" +
             "</script>")
-    List<Work> selectByUserIds(@Param("userIds") List<Long> userIds);
+    List<Work> selectByUserIds(@Param("userIds") List<Long> userIds,
+                               @Param("offset") int offset,
+                               @Param("limit") int limit);
 
     @Select("SELECT w.*, u.username, u.avatar " +
             "FROM works w " +

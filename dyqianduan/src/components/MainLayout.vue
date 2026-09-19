@@ -119,6 +119,42 @@
       </div>
     </main>
 
+    <!-- 移动端底部导航（桌面端通过 CSS 隐藏） -->
+    <nav class="mobile-tabbar">
+      <div class="tab-item" :class="{ active: $route.path === '/featured' }" @click="$router.push('/featured')">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+        </svg>
+        <span>精选</span>
+      </div>
+      <div class="tab-item" :class="{ active: $route.path === '/recommend' }" @click="$router.push('/recommend')">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+        </svg>
+        <span>推荐</span>
+      </div>
+      <div class="tab-item" :class="{ active: showChat && currentChatFriend?.id === AI_BOT.id }" @click="openAiChat">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
+          <circle cx="9" cy="10" r="1.5"/>
+          <circle cx="15" cy="10" r="1.5"/>
+        </svg>
+        <span>AI 对话</span>
+      </div>
+      <div class="tab-item" :class="{ active: $route.path === '/friends' }" @click="goToFriends">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+        </svg>
+        <span>朋友</span>
+      </div>
+      <div class="tab-item" :class="{ active: $route.path === '/my' }" @click="$router.push('/my')">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+        <span>我的</span>
+      </div>
+    </nav>
+
     <!-- 聊天窗口 -->
     <div class="chat-panel" v-show="showChat">
       <div class="chat-sidebar">
@@ -1921,4 +1957,93 @@ const scrollSharedCommentsToBottom = () => {
 }
 .shared-send-btn:hover:not(:disabled) { background: #e0264d; }
 .shared-send-btn:disabled { background: #555; cursor: not-allowed; }
+
+/* ===== 移动端底部导航（桌面隐藏） ===== */
+.mobile-tabbar {
+  display: none;
+}
+
+/* ===== 响应式适配：≤768px 走移动布局 ===== */
+@media (max-width: 768px) {
+  /* 侧边栏退场，底部导航登场 */
+  .sidebar {
+    display: none;
+  }
+  .mobile-tabbar {
+    display: flex;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #1a1a1a;
+    border-top: 1px solid #2a2a2a;
+    z-index: 999998;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .tab-item.active {
+    color: #fe2c55;
+  }
+  /* 内容区给底部导航留空间 */
+  .main-content {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 顶部栏收紧 */
+  .top-bar {
+    padding: 8px 12px;
+  }
+  .search-container {
+    max-width: none;
+  }
+
+  /* 聊天窗全屏化 */
+  .chat-panel {
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    z-index: 999999;
+  }
+  /* 会话列表窄化为头像列表 */
+  .chat-sidebar {
+    width: 72px;
+  }
+  .chat-sidebar-header span {
+    font-size: 12px;
+  }
+  /* 窄列表只显示头像，避免文字竖排 */
+  .chat-sidebar-name {
+    display: none;
+  }
+  .ai-badge {
+    display: none;
+  }
+  .chat-sidebar-item {
+    justify-content: center;
+    padding: 10px 8px;
+  }
+  .chat-sidebar-header {
+    justify-content: center;
+    padding: 10px 4px;
+  }
+  .chat-main {
+    border-radius: 0;
+  }
+
+  /* 好友弹窗防溢出 */
+  .friends-popup {
+    width: min(280px, calc(100vw - 24px));
+  }
+}
+
 </style>

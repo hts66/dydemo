@@ -24,7 +24,7 @@
       webkit-playsinline
       x5-playsinline
       :muted="isMuted"
-      preload="none"
+      :preload="preload ? 'auto' : 'none'"
       @loadstart="onLoadStart"
       @loadedmetadata="onLoadedMetadata"
       @canplay="onCanPlay"
@@ -90,6 +90,11 @@ const props = defineProps({
     default: () => ({})
   },
   isPlay: {
+    type: Boolean,
+    default: false
+  },
+  // 相邻预加载：提前拉取 metadata 和首段数据，滑到时秒开（只加载不播放）
+  preload: {
     type: Boolean,
     default: false
   }
@@ -187,13 +192,26 @@ const doPlay = (token) => {
   })
 }
 
+// 相邻预加载：提前设置 src 并加载（只拉取数据不播放），滑到时 play() 直接命中缓冲
+const preloadMedia = () => {
+  if (!videoRef.value || !videoSrc.value) return
+  if (!videoRef.value.src) {
+    videoRef.value.preload = 'auto'
+    videoRef.value.src = videoSrc.value
+    videoRef.value.load()
+  }
+}
+
 // Play video
 const play = async () => {
   if (!videoRef.value) return
 
   const token = ++playToken
   videoRef.value.muted = isMuted.value
-  loading.value = true
+  // 已预加载（readyState >= 2）时不显示加载圈，直接秒开
+  if (videoRef.value.readyState < 2) {
+    loading.value = true
+  }
 
   // Reload if no src set yet
   if (!videoRef.value.src && videoSrc.value) {
@@ -221,18 +239,15 @@ const pause = () => {
   playing.value = false
 }
 
-// Stop and reset video
+// Stop and reset video — 保留 src 与缓冲，回滑秒开；释放交给 onUnmounted
 const stop = () => {
   if (videoRef.value) {
     videoRef.value.pause()
     videoRef.value.currentTime = 0
-    videoRef.value.removeAttribute('src')
-    videoRef.value.load()
-    loaded.value = false
+    loaded.value = true  // 缓冲仍在，回滑时不再闪现封面图
     playing.value = false
     loading.value = false
     currentTime.value = 0
-    duration.value = 0
     isMuted.value = false  // 重置静音状态，下次播放时重新尝试非静音
     autoplayBlocked.value = false
     thumbnailError.value = false  // 重置封面错误状态，下次可以重试
@@ -328,6 +343,9 @@ const onLoadedMetadata = () => {
 
 const onCanPlay = () => {
   loading.value = false
+  // 首帧可解码即撤掉封面，避免"先封面后视频"的闪现。
+  // 预加载的视频在滑到之前就完成这个切换，用户看到的直接是视频画面
+  loaded.value = true
 }
 
 const onPlay = () => {
@@ -407,6 +425,11 @@ watch(() => props.isPlay, (newVal) => {
   }
 })
 
+// 相邻状态动态变化时触发预加载（进入 ±1 范围）
+watch(() => props.preload, (newVal) => {
+  if (newVal) preloadMedia()
+})
+
 watch(videoSrc, (newSrc) => {
   thumbnailError.value = false  // 新视频源，重置封面错误状态
   if (newSrc && videoRef.value) {
@@ -425,6 +448,9 @@ onMounted(() => {
 
   if (props.isPlay) {
     nextTick(() => play())
+  } else if (props.preload) {
+    // 挂载时就在预加载范围（如首页首个视频的相邻视频），立即开始拉取
+    nextTick(() => preloadMedia())
   }
 })
 

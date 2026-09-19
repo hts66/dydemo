@@ -11,7 +11,7 @@ public interface WorkService extends IService<Work> {
 
     List<Work> getUserWorks(Long userId, int page, int size);
 
-    List<Work> getWorksByUserIds(List<Long> userIds);
+    List<Work> getWorksByUserIds(List<Long> userIds, int page, int size);
 
     boolean publishWork(Work work);
 

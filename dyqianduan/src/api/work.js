@@ -27,14 +27,14 @@ export const deleteWork = (id) => {
   return request.delete(`/works/${id}`)
 }
 
-// 获取朋友视频列表（当前登录用户，userId 由后端从 token 取）
-export const getFriendsWorks = () => {
-  return request.get('/works/my/friends')
+// 获取朋友视频列表（分页；当前登录用户，userId 由后端从 token 取）
+export const getFriendsWorks = (page = 1, size = 10) => {
+  return request.get(`/works/my/friends?page=${page}&size=${size}`)
 }
 
-// 获取关注用户视频列表（当前登录用户，userId 由后端从 token 取）
-export const getFollowingWorks = () => {
-  return request.get('/works/my/following')
+// 获取关注用户视频列表（分页；当前登录用户，userId 由后端从 token 取）
+export const getFollowingWorks = (page = 1, size = 10) => {
+  return request.get(`/works/my/following?page=${page}&size=${size}`)
 }
 
 // 获取推荐视频列表

@@ -101,7 +101,10 @@ public class WorkController {
      * userId 只取自 token，不接受外部传入，避免越权查看他人社交关系
      */
     @GetMapping("/my/friends")
-    public Response<List<Work>> getMyFriendsWorks(HttpServletRequest request) {
+    public Response<List<Work>> getMyFriendsWorks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
         try {
             Long userId = getUserIdFromToken(request);
             if (userId == null) {
@@ -115,7 +118,7 @@ public class WorkController {
             for (Map<String, Object> friend : friends) {
                 friendIds.add(((Number) friend.get("id")).longValue());
             }
-            List<Work> works = workService.getWorksByUserIds(friendIds);
+            List<Work> works = workService.getWorksByUserIds(friendIds, page, size);
             return Response.success(works);
         } catch (Exception e) {
             log.error("获取朋友视频失败", e);
@@ -128,7 +131,10 @@ public class WorkController {
      * userId 只取自 token，不接受外部传入，避免越权查看他人社交关系
      */
     @GetMapping("/my/following")
-    public Response<List<Work>> getMyFollowingWorks(HttpServletRequest request) {
+    public Response<List<Work>> getMyFollowingWorks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
         try {
             Long userId = getUserIdFromToken(request);
             if (userId == null) {
@@ -142,7 +148,7 @@ public class WorkController {
             for (Map<String, Object> user : following) {
                 followingIds.add(((Number) user.get("id")).longValue());
             }
-            List<Work> works = workService.getWorksByUserIds(followingIds);
+            List<Work> works = workService.getWorksByUserIds(followingIds, page, size);
             return Response.success(works);
         } catch (Exception e) {
             log.error("获取关注视频失败", e);

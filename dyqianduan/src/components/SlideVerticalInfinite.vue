@@ -89,7 +89,7 @@ const props = defineProps({
   }
 })
 
-const emitEvents = defineEmits(['update:index', 'loadMore', 'refresh'])
+const emitEvents = defineEmits(['update:index', 'loadMore', 'refresh', 'willSwitch'])
 
 // ── Refs ──────────────────────────────────────────────
 const containerRef = ref(null)
@@ -145,7 +145,9 @@ const wrapperStyle = computed(() => ({
 }))
 
 // ── Gesture: Pointer Events ───────────────────────────
-const screenHeight = () => window.innerHeight
+// 用容器真实高度而非 window.innerHeight：移动端地址栏/底部Tabbar会压缩可视区，
+// 100vh 包含这些区域，会导致一屏出现 1.5 个视频
+const screenHeight = () => containerRef.value?.clientHeight || window.innerHeight
 
 const onPointerDown = (e) => {
   if (isAnimating.value) return
@@ -292,6 +294,9 @@ const switchToIndex = (targetIndex) => {
   }
 
   isAnimating.value = true
+
+  // ★ 动画一开始就通知父级目标下标，让相邻视频立即开始预加载（不等 300ms 动画结束）
+  emitEvents('willSwitch', targetIndex)
 
   const sh = screenHeight()
   const oldLocalStart = localStart.value
@@ -469,12 +474,15 @@ defineExpose({
 
 .slide-wrapper {
   position: relative;
+  /* 确定高度，让 .slide-item 的 height:100% 有参照（否则塌缩为内容高度） */
+  height: 100%;
   will-change: transform;
 }
 
 .slide-item {
   width: 100%;
-  height: 100vh;
+  /* 100% 而非 100vh：移动端地址栏+底部Tabbar会压缩可视区，100vh 会多出一截 */
+  height: 100%;
   position: relative;
   background: #000;
   overflow: hidden;

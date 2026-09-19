@@ -255,6 +255,15 @@ const isOwnVideo = (work) => {
   padding: 20px;
 }
 
+/* 移动端：两列紧凑网格 */
+@media (max-width: 768px) {
+  .video-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
 .video-card {
   background: #2a2a2a;
   border-radius: 8px;

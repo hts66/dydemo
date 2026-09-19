@@ -49,3 +49,8 @@ npm-debug.log*
 # ===== 临时数据 =====
 douyin_downloads/
 all_work_ids.txt
+
+# ===== JMeter 压测产物（保留 .jmx 脚本和 .py/.bat 工具） =====
+*.hprof
+*.jtl
+jmeter/report_*/

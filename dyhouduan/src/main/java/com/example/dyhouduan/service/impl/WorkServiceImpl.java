@@ -52,11 +52,12 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements Wo
     }
 
     @Override
-    public List<Work> getWorksByUserIds(List<Long> userIds) {
+    public List<Work> getWorksByUserIds(List<Long> userIds, int page, int size) {
         if (userIds == null || userIds.isEmpty()) {
             return List.of();
         }
-        return baseMapper.selectByUserIds(userIds);
+        int offset = (page - 1) * size;
+        return baseMapper.selectByUserIds(userIds, offset, size);
     }
 
     @Override

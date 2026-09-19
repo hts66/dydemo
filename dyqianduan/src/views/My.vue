@@ -979,6 +979,13 @@ onMounted(() => {
   transition: height 0.1s ease-out;
 }
 
+/* 移动端：左右留白收紧 */
+@media (max-width: 768px) {
+  .profile-header-section {
+    padding: 16px 16px 24px;
+  }
+}
+
 .profile-header-section::after {
   content: '';
   position: absolute;
@@ -1140,6 +1147,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
 }
+
+/* 移动端适配统一放在文件末尾，避免被后续同优先级规则覆盖 */
 
 .tab-item {
   padding: 14px 24px;
@@ -1942,4 +1951,26 @@ onMounted(() => {
 .share-friend-item img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .share-friend-item span { color: #fff; font-size: 13px; }
 .share-success { padding: 10px 16px; text-align: center; color: #2ecc71; font-size: 13px; border-top: 1px solid #3a3a3a; }
+
+/* ===== 移动端适配（置于文件末尾，确保覆盖上方同优先级规则） ===== */
+@media (max-width: 768px) {
+  .profile-header-section {
+    padding: 16px 16px 24px;
+  }
+  .tabs-bar {
+    padding: 0 12px;
+  }
+  .tab-item {
+    padding: 12px 6px;
+    font-size: 13px;
+  }
+  .edit-btn {
+    white-space: nowrap;
+    padding: 6px 10px;
+  }
+  .logout-btn {
+    top: 14px;
+    right: 12px;
+  }
+}
 </style>
