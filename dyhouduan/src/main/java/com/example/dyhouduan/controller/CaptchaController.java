@@ -11,6 +11,7 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,6 +25,7 @@ public class CaptchaController {
     private static final int WIDTH = 120;
     private static final int HEIGHT = 40;
     private static final int CODE_LENGTH = 4;
+    private static final long CAPTCHA_TTL_MINUTES = 5;
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
@@ -64,7 +66,11 @@ public class CaptchaController {
             String captchaKey = UUID.randomUUID().toString();
             long timestamp = System.currentTimeMillis();
             String captchaValue = code.toString() + ":" + timestamp;
-            redisTemplate.opsForValue().set("captcha:" + captchaKey, captchaValue);
+            redisTemplate.opsForValue().set(
+                    "captcha:" + captchaKey,
+                    captchaValue,
+                    Duration.ofMinutes(CAPTCHA_TTL_MINUTES)
+            );
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(image, "png", baos);
