@@ -17,7 +17,12 @@ log = logging.getLogger(__name__)
 
 
 @tool
-async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str] = None) -> str:
+async def recommend_videos(
+    query: str,
+    limit: int = 5,
+    exclude_ids: Optional[str] = None,
+    exclude_tags: Optional[str] = None,
+) -> str:
     """
     根据用户的自然语言描述推荐视频。当用户说"推荐XX视频"、"给我找XX"、"有没有XX"等时调用此工具。
     内部会先用AI提取标签，再通过向量搜索匹配最相似的视频。向量搜索无结果时自动降级为关键词搜索。
@@ -27,12 +32,24 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
     - exclude_ids 格式为逗号分隔的ID字符串，如 "3,7,12"
     - 首次推荐不传 exclude_ids
 
+    **重要 — 否定/排除条件必须用 exclude_tags（语义向量听不懂"不要/没戴"）**:
+    - 用户说"没有/没戴/不戴/不要/不想看/排除/除了XX"时，把被排除的内容对应的标签名传入 exclude_tags
+    - exclude_tags 为逗号分隔的标签名，如 "眼镜妹" 或 "眼镜妹,黑丝"
+    - 常见说法 → 标签映射:
+      "没戴眼镜/不戴眼镜/不要戴眼镜的" → 眼镜妹
+      "不要黑丝/不穿丝袜的" → 黑丝
+      "不要跳舞的" → 单人舞,多人舞
+      "不要室外的" → 室外
+    - 注意: query 里仍可保留用户原始说法，但排除条件一定要同时传 exclude_tags，只写在 query 里不会生效！
+    - 示例: 用户"给我几个没戴眼镜的美女视频" → recommend_videos(query="美女视频", exclude_tags="眼镜妹")
+
     精确度优先：只返回相似度 score >= 0.3 的视频，宁少勿滥。
 
     Args:
         query: 用户的原始查询语句，例如"推荐御姐黑丝长腿视频"
         limit: 最多返回视频数量，默认5个
         exclude_ids: 逗号分隔的已推荐视频ID，如 "1,3,5"。传空字符串表示不排除
+        exclude_tags: 逗号分隔的需要排除的标签名，如 "眼镜妹" 或 "眼镜妹,黑丝"。带这些标签的视频会在向量库中被硬性过滤掉
 
     Returns:
         JSON格式的推荐结果，包含视频列表
@@ -45,7 +62,13 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
                 excluded = {int(x.strip()) for x in exclude_ids.split(",") if x.strip().isdigit()}
             except Exception:
                 pass
-        log.info(f"推荐请求: '{query}' limit={limit} exclude={excluded}")
+
+        # 解析排除标签（否定条件）
+        excluded_tags = set()
+        if exclude_tags and exclude_tags.strip():
+            excluded_tags = {t.strip() for t in exclude_tags.split(",") if t.strip()}
+
+        log.info(f"推荐请求: '{query}' limit={limit} exclude={excluded} exclude_tags={excluded_tags}")
 
         # 1. 对查询做语义 embedding
         vector = await embed(query)
@@ -57,8 +80,19 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
             }, ensure_ascii=False)
 
         # 2. Qdrant 语义向量检索（多取一些，供排除已看 + 随机采样）
-        vector_results = await qdrant_client.search_similar(vector, max(limit * 4, 20))
-        log.info(f"语义检索: '{query}' → {len(vector_results)} 条")
+        #    否定标签通过 must_not 过滤器在检索阶段硬性排除（向量本身无法理解否定语义）
+        qdrant_filter = None
+        if excluded_tags:
+            qdrant_filter = {
+                "must_not": [
+                    {"key": "tags", "match": {"value": tag}}
+                    for tag in sorted(excluded_tags)
+                ]
+            }
+        vector_results = await qdrant_client.search_similar(
+            vector, max(limit * 4, 20), filter_obj=qdrant_filter
+        )
+        log.info(f"语义检索: '{query}' exclude_tags={excluded_tags} → {len(vector_results)} 条")
 
         if not vector_results:
             return json.dumps({
@@ -67,7 +101,7 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
                 "videos": []
             }, ensure_ascii=False)
 
-        # 3. 格式化 → 排除已推荐 → 随机采样 → 不排序
+        # 3. 格式化 → 排除已推荐 → 排除否定标签 → 随机采样 → 不排序
         all_videos = []
         for r in vector_results:
             payload = r.get("payload", {})
@@ -78,12 +112,25 @@ async def recommend_videos(query: str, limit: int = 5, exclude_ids: Optional[str
                 "tags": payload.get("tags", []),
             })
 
-        available = [v for v in all_videos if v["id"] not in excluded]
+        # Python 侧兜底：再次按否定标签过滤（防止 Qdrant 中个别点缺少 tags payload 导致漏过滤）
+        def _is_allowed(v):
+            if v["id"] in excluded:
+                return False
+            if excluded_tags and excluded_tags.intersection(set(v.get("tags") or [])):
+                return False
+            return True
+
+        available = [v for v in all_videos if _is_allowed(v)]
 
         if not available:
+            if excluded_tags:
+                hint = "、".join(sorted(excluded_tags))
+                message = f"没有找到排除「{hint}」的相关视频，换个条件试试吧~ 😊"
+            else:
+                message = f"「{query}」相关的视频看完啦，试试其他类型吧~ 😊"
             return json.dumps({
                 "found": False,
-                "message": f"「{query}」相关的视频看完啦，试试其他类型吧~ 😊",
+                "message": message,
                 "videos": [],
             }, ensure_ascii=False)
 
@@ -137,7 +184,9 @@ async def search_videos_by_keyword(keyword: str, limit: int = 5) -> str:
             if data.get("code") != 200:
                 return json.dumps({"found": False, "message": "搜索失败", "videos": []}, ensure_ascii=False)
 
-            works = data["data"].get("records", [])
+            # 后端 /api/works 返回的 data 直接是 List，而非分页对象 {records: [...]}
+            raw = data["data"]
+            works = raw if isinstance(raw, list) else raw.get("records", [])
             videos = [
                 {
                     "id": w["id"],
@@ -185,7 +234,9 @@ async def get_hot_videos(limit: int = 5) -> str:
             if data.get("code") != 200:
                 return json.dumps({"found": False, "message": "获取热门失败", "videos": []}, ensure_ascii=False)
 
-            works = data["data"].get("records", [])
+            # 后端 /api/works/hot 返回的 data 直接是 List，而非分页对象 {records: [...]}
+            raw = data["data"]
+            works = raw if isinstance(raw, list) else raw.get("records", [])
             videos = [
                 {
                     "id": w["id"],

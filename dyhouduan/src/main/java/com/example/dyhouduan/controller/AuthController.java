@@ -40,10 +40,7 @@ public class AuthController {
     @PostMapping("/login")
     public Response<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         try {
-            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
-                return Response.error(400, "图形验证码错误");
-            }
-
+            // 图形验证码已在发送邮箱验证码时验证，这里不再重复验证
             if (!verificationCodeService.verifyCode(request.getEmail(), request.getCode())) {
                 return Response.error(400, "邮箱验证码错误或已过期");
             }
@@ -58,10 +55,7 @@ public class AuthController {
     @PostMapping("/login/code")
     public Response<LoginResponse> loginWithCode(@RequestBody LoginRequest request) {
         try {
-            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
-                return Response.error(400, "图形验证码错误");
-            }
-
+            // 图形验证码已在发送邮箱验证码时验证，这里不再重复验证
             if (!verificationCodeService.verifyCode(request.getEmail(), request.getCode())) {
                 return Response.error(400, "验证码错误或已过期");
             }
@@ -99,10 +93,7 @@ public class AuthController {
     @PostMapping("/register")
     public Response<User> register(@Valid @RequestBody RegisterRequest request) {
         try {
-            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
-                return Response.error(400, "图形验证码错误");
-            }
-
+            // 图形验证码已在发送邮箱验证码时验证
             if (!verificationCodeService.verifyCode(request.getEmail(), request.getCode())) {
                 return Response.error(400, "验证码错误或已过期");
             }
@@ -118,10 +109,7 @@ public class AuthController {
     @PostMapping("/register/code")
     public Response<LoginResponse> registerWithCode(@RequestBody RegisterRequest request) {
         try {
-            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
-                return Response.error(400, "图形验证码错误");
-            }
-
+            // 图形验证码已在发送邮箱验证码时验证
             if (!verificationCodeService.verifyCode(request.getEmail(), request.getCode())) {
                 return Response.error(400, "验证码错误或已过期");
             }
@@ -151,6 +139,11 @@ public class AuthController {
     @PostMapping("/send-code")
     public Response<SendCodeResponse> sendCode(@RequestBody SendCodeRequest request) {
         try {
+            // 先验证图形验证码，防止恶意刷验证码
+            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
+                return Response.error(400, "图形验证码错误");
+            }
+
             verificationCodeService.generateCode(request.getEmail());
             return Response.success("验证码已发送", new SendCodeResponse(60));
         } catch (VerificationCodeRateLimitException e) {
@@ -181,6 +174,11 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public Response<SendCodeResponse> forgotPassword(@RequestBody SendCodeRequest request) {
         try {
+            // 先验证图形验证码
+            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
+                return Response.error(400, "图形验证码错误");
+            }
+
             User user = userService.findByEmail(request.getEmail());
             if (user == null) {
                 return Response.error(400, "该邮箱未注册");
@@ -202,10 +200,7 @@ public class AuthController {
     @PostMapping("/reset-password")
     public Response<String> resetPassword(@RequestBody ResetPasswordRequest request) {
         try {
-            if (!validateCaptcha(request.getCaptchaKey(), request.getCaptcha())) {
-                return Response.error(400, "图形验证码错误");
-            }
-
+            // 图形验证码已在发送邮箱验证码时验证
             if (!verificationCodeService.verifyCode(request.getEmail(), request.getCode())) {
                 return Response.error(400, "验证码错误或已过期");
             }

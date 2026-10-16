@@ -19,6 +19,7 @@
             placeholder="请输入邮箱"
             class="form-input"
             :class="{ error: errors.email }"
+            @input="errors.email = ''; errorMessage = ''"
           />
           <span v-if="errors.email" class="error-message">{{ errors.email }}</span>
         </div>
@@ -30,6 +31,7 @@
             placeholder="请输入用户名"
             class="form-input"
             :class="{ error: errors.username }"
+            @input="errors.username = ''; errorMessage = ''"
           />
           <span v-if="errors.username" class="error-message">{{ errors.username }}</span>
         </div>
@@ -41,6 +43,7 @@
             placeholder="请输入密码（6-20位）"
             class="form-input"
             :class="{ error: errors.password }"
+            @input="errors.password = ''; errorMessage = ''"
           />
           <span v-if="errors.password" class="error-message">{{ errors.password }}</span>
         </div>
@@ -52,6 +55,7 @@
             placeholder="请再次输入密码"
             class="form-input"
             :class="{ error: errors.confirmPassword }"
+            @input="errors.confirmPassword = ''; errorMessage = ''"
           />
           <span v-if="errors.confirmPassword" class="error-message">{{ errors.confirmPassword }}</span>
         </div>
@@ -64,6 +68,7 @@
               placeholder="请输入验证码"
               class="form-input code-input"
               maxlength="6"
+              @input="errorMessage = ''"
             />
             <button
               type="button"
@@ -75,25 +80,6 @@
               <span v-else>发送验证码</span>
             </button>
           </div>
-        </div>
-
-        <div class="form-group">
-          <div class="captcha-group">
-            <input
-              v-model="form.captcha"
-              type="text"
-              placeholder="请输入图形验证码"
-              class="form-input captcha-input"
-              maxlength="4"
-            />
-            <img
-              :src="captchaImage"
-              alt="图形验证码"
-              class="captcha-img"
-              @click="refreshCaptcha"
-            />
-          </div>
-          <span v-if="errors.captcha" class="error-message">{{ errors.captcha }}</span>
         </div>
 
         <button type="submit" class="submit-btn" :disabled="loading">
@@ -109,14 +95,24 @@
         <router-link to="/login">立即登录</router-link>
       </p>
     </div>
+
+    <!-- 图形验证码弹窗 -->
+    <CaptchaModal
+      :visible="showCaptchaModal"
+      :external-error="captchaModalError"
+      :refresh-key="refreshCaptchaKey"
+      @close="showCaptchaModal = false"
+      @success="handleCaptchaSuccess"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import request from '../utils/request'
+import CaptchaModal from '../components/CaptchaModal.vue'
 import {
   getRetryAfterSeconds,
   useVerificationCodeCooldown,
@@ -131,8 +127,6 @@ const form = reactive({
   password: '',
   confirmPassword: '',
   code: '',
-  captcha: '',
-  captchaKey: '',
 })
 
 const errors = reactive({
@@ -140,11 +134,13 @@ const errors = reactive({
   username: '',
   password: '',
   confirmPassword: '',
-  captcha: '',
 })
 
 const errorMessage = ref('')
 const loading = ref(false)
+const showCaptchaModal = ref(false)
+const captchaModalError = ref('')
+const refreshCaptchaKey = ref(0)
 const {
   codeBtnDisabled,
   codeCountdown,
@@ -152,23 +148,6 @@ const {
   markSent,
   markFailed,
 } = useVerificationCodeCooldown()
-const captchaImage = ref('')
-
-const refreshCaptcha = async () => {
-  try {
-    const response = await request.get('/captcha')
-    if (response && response.data) {
-      form.captchaKey = response.data.key
-      captchaImage.value = response.data.image
-    }
-  } catch (err) {
-    console.error('获取验证码失败', err)
-  }
-}
-
-onMounted(() => {
-  refreshCaptcha()
-})
 
 const validateForm = () => {
   let isValid = true
@@ -176,7 +155,6 @@ const validateForm = () => {
   errors.username = ''
   errors.password = ''
   errors.confirmPassword = ''
-  errors.captcha = ''
   errorMessage.value = ''
 
   if (!form.email) {
@@ -216,11 +194,6 @@ const validateForm = () => {
     isValid = false
   }
 
-  if (!form.captcha) {
-    errors.captcha = '请输入图形验证码'
-    isValid = false
-  }
-
   return isValid
 }
 
@@ -236,19 +209,35 @@ const sendCode = async () => {
     return
   }
 
+  // 先弹图形验证码对话框
+  captchaModalError.value = ''
+  showCaptchaModal.value = true
+}
+
+const handleCaptchaSuccess = async (captchaKey: string, captcha: string) => {
+  captchaModalError.value = ''
+
   if (!beginSending()) return
 
   try {
     await request.post('/auth/send-code', {
       email: form.email.trim().toLowerCase(),
+      captchaKey,
+      captcha,
     })
     markSent()
+    showCaptchaModal.value = false
   } catch (err: any) {
-    markFailed(getRetryAfterSeconds(err))
-    errorMessage.value =
-      err?.response?.data?.message || err?.message || '发送验证码失败'
-    await refreshCaptcha()
-    form.captcha = ''
+    const msg = err?.response?.data?.message || err?.message || ''
+    if (msg.includes('图形验证码')) {
+      captchaModalError.value = '图形验证码错误，请重试'
+      refreshCaptchaKey.value++
+      markFailed()  // 恢复按钮可用
+    } else {
+      showCaptchaModal.value = false
+      markFailed(getRetryAfterSeconds(err))
+      errorMessage.value = msg || '发送验证码失败'
+    }
   }
 }
 
@@ -263,8 +252,6 @@ const handleSubmit = async () => {
       username: form.username,
       password: form.password,
       code: form.code,
-      captcha: form.captcha,
-      captchaKey: form.captchaKey,
     })
 
     if (response.data) {
@@ -275,8 +262,6 @@ const handleSubmit = async () => {
     router.push('/')
   } catch (err: any) {
     errorMessage.value = err?.message || '注册失败'
-    await refreshCaptcha()
-    form.captcha = ''
   } finally {
     loading.value = false
   }
