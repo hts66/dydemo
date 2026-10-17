@@ -1,5 +1,6 @@
 package com.example.dyhouduan.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.dyhouduan.dto.Response;
 import com.example.dyhouduan.entity.User;
 import com.example.dyhouduan.entity.Work;
@@ -204,6 +205,26 @@ public class WorkController {
         } catch (Exception e) {
             log.error("删除视频失败", e);
             return Response.error("删除视频失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 批量校验视频是否存在
+     * 用于前端判断"视频被删" vs "网络问题"
+     */
+    @GetMapping("/exists")
+    public Response<List<Long>> filterExisting(@RequestParam List<Long> ids) {
+        try {
+            if (ids == null || ids.isEmpty()) {
+                return Response.success(new ArrayList<>());
+            }
+            LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
+            wrapper.select(Work::getId).in(Work::getId, ids);
+            List<Long> existingIds = workService.listObjs(wrapper, obj -> ((Number) obj).longValue());
+            return Response.success(existingIds);
+        } catch (Exception e) {
+            log.error("批量校验视频存在性失败", e);
+            return Response.error("校验失败: " + e.getMessage());
         }
     }
 

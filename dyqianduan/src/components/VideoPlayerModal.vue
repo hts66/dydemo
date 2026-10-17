@@ -15,6 +15,7 @@
             playsinline
             webkit-playsinline
             x5-playsinline
+            @error="handleVideoError"
           ></video>
         </div>
         <div class="interaction-section">
@@ -105,6 +106,8 @@ import { isLiked as checkIsLiked, toggleLike } from '../api/like'
 import { getComments, addComment } from '../api/comment'
 import { checkIsFollowing, toggleFollow } from '../api/follow'
 import { mediaUrl } from '../utils/media'
+import { showToast } from '../utils/toast'
+import request from '../utils/request'
 
 const props = defineProps({
   visible: {
@@ -134,8 +137,54 @@ const isOwnVideo = () => {
   return props.work.userId === userStore.user.id
 }
 
+// ── Video Error (video deleted / network issue) ─────────
+const handleVideoError = async () => {
+  if (!props.work) return
+  const workId = props.work.id
+
+  try {
+    // 二次确认：调后端接口判断是"被删"还是"网络问题"
+    const res = await request.get('/works/exists', { params: { ids: [workId] } })
+    const existingIds = res?.data || []
+
+    if (!existingIds.includes(workId)) {
+      // 视频确实被删了
+      showToast('该视频不存在')
+      // 关闭弹窗
+      setTimeout(() => {
+        closeVideo()
+      }, 800)
+    } else {
+      // 只是网络问题
+      showToast('网络开小差了，请重试')
+    }
+  } catch (err) {
+    console.error('校验视频存在性失败', err)
+    showToast('网络异常，请稍后重试')
+  }
+}
+
 const loadWorkData = async () => {
   if (!props.work) return
+  
+  // 先校验视频是否存在（防止已删除的视频还能播放）
+  try {
+    const res = await request.get('/works/exists', { params: { ids: [props.work.id] } })
+    const existingIds = res?.data || []
+    
+    if (!existingIds.includes(props.work.id)) {
+      // 视频已被删除
+      showToast('该视频不存在')
+      // 关闭弹窗
+      setTimeout(() => {
+        closeVideo()
+      }, 800)
+      return
+    }
+  } catch (err) {
+    console.error('校验视频存在性失败', err)
+    // 校验失败时不阻止播放（可能是网络问题）
+  }
   
   try {
     const [likeResult, commentResult, followResult] = await Promise.all([
@@ -171,6 +220,9 @@ const playVideo = async () => {
         console.error('播放失败', e)
       }
     })
+    
+    // 启动定期校验（播放中每3秒检查一次视频是否还存在）
+    startPeriodicCheck()
   }
 }
 
@@ -182,7 +234,46 @@ const pauseVideo = () => {
 
 const closeVideo = () => {
   pauseVideo()
+  
+  // 清除定期校验定时器
+  if (checkExistInterval) {
+    clearInterval(checkExistInterval)
+    checkExistInterval = null
+  }
+  
   emit('close')
+}
+
+// 定期校验视频是否存在（每3秒检查一次）
+let checkExistInterval = null
+const startPeriodicCheck = () => {
+  if (checkExistInterval) clearInterval(checkExistInterval)
+  
+  checkExistInterval = setInterval(async () => {
+    if (!props.work) {
+      clearInterval(checkExistInterval)
+      checkExistInterval = null
+      return
+    }
+    
+    try {
+      const res = await request.get('/works/exists', { params: { ids: [props.work.id] } })
+      const existingIds = res?.data || []
+      
+      if (!existingIds.includes(props.work.id)) {
+        // 视频已被删除
+        clearInterval(checkExistInterval)
+        checkExistInterval = null
+        showToast('该视频不见了')
+        // 关闭弹窗
+        setTimeout(() => {
+          closeVideo()
+        }, 800)
+      }
+    } catch (err) {
+      console.error('定期校验失败', err)
+    }
+  }, 3000) // 每3秒校验一次
 }
 
 const handleLike = async () => {

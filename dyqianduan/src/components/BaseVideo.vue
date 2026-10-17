@@ -100,6 +100,8 @@ const props = defineProps({
   }
 })
 
+const emitVideoError = defineEmits(['video-error'])
+
 const videoRef = ref(null)
 const loading = ref(false)
 const loaded = ref(false)
@@ -221,7 +223,8 @@ const play = async () => {
   const onErrorHandler = () => {
     if (token !== playToken) return
     loading.value = false
-    console.error('视频加载失败')
+    console.error('视频加载失败', props.item?.id)
+    emitVideoError('video-error', props.item?.id)
   }
 
   videoRef.value.addEventListener('error', onErrorHandler, { once: true })
@@ -374,7 +377,8 @@ const onEnded = () => {
 
 const onError = () => {
   loading.value = false
-  console.error('视频加载失败')
+  console.error('视频加载失败', props.item?.id)
+  emitVideoError('video-error', props.item?.id)
 }
 
 // Event bus handlers

@@ -21,6 +21,7 @@
               :item="item"
               :is-play="isActive"
               :preload="isPreloadTarget(index)"
+              @video-error="handleVideoError"
             />
 
             <!-- Bottom info: author avatar + name + title -->
@@ -172,6 +173,8 @@ import SlideVerticalInfinite from './SlideVerticalInfinite.vue'
 import BaseVideo from './BaseVideo.vue'
 import { on, off, emit, EVENT_KEY } from '../utils/bus'
 import { mediaUrl } from '../utils/media'
+import { showToast } from '../utils/toast'
+import request from '../utils/request'
 
 const router = useRouter()
 const route = useRoute()
@@ -330,9 +333,34 @@ const loadMore = () => {
 }
 
 // ── Index change handler ──────────────────────────────
-const onIndexChange = (newIndex) => {
+const onIndexChange = async (newIndex) => {
   currentActiveIndex.value = newIndex
   preloadCenter.value = newIndex
+  
+  // 校验当前视频是否存在（防止已删除的视频还能播放）
+  const currentWork = works.value[newIndex]
+  if (currentWork) {
+    try {
+      const res = await request.get('/works/exists', { params: { ids: [currentWork.id] } })
+      const existingIds = res?.data || []
+      
+      if (!existingIds.includes(currentWork.id)) {
+        // 视频已被删除
+        showToast('该视频不存在')
+        // 标记为失效
+        currentWork._invalid = true
+        // 自动滑到下一条（如果不是最后一条）
+        if (newIndex < works.value.length - 1) {
+          setTimeout(() => {
+            slideRef.value?.next?.()
+          }, 800)
+        }
+      }
+    } catch (err) {
+      console.error('校验视频存在性失败', err)
+      // 校验失败时不阻止播放（可能是网络问题）
+    }
+  }
 }
 
 // 动画开始瞬间更新预加载中心，让新视频的相邻视频提前开始缓冲
@@ -342,6 +370,51 @@ const onWillSwitch = (targetIndex) => {
 
 // 距预加载中心 ±1 的视频提前拉取数据（滑到时秒开）
 const isPreloadTarget = (index) => Math.abs(index - preloadCenter.value) <= 1
+
+// ── Video Error (video deleted / network issue) ─────────
+let consecutiveErrors = 0
+const MAX_CONSECUTIVE_ERRORS = 3
+
+const handleVideoError = async (workId) => {
+  if (!workId) return
+
+  // 防止连续错误风暴
+  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+    showToast('多个视频已失效，请刷新页面')
+    return
+  }
+
+  try {
+    // 二次确认：调后端接口判断是"被删"还是"网络问题"
+    const res = await request.get('/works/exists', { params: { ids: [workId] } })
+    const existingIds = res?.data || []
+
+    if (!existingIds.includes(workId)) {
+      // 视频确实被删了
+      consecutiveErrors++
+      showToast('该视频不存在')
+
+      // 标记为失效
+      const idx = works.value.findIndex(w => w.id === workId)
+      if (idx !== -1) {
+        works.value[idx]._invalid = true
+      }
+
+      // 800ms 后自动滑到下一条（如果不是最后一条）
+      if (currentActiveIndex.value < works.value.length - 1) {
+        setTimeout(() => {
+          slideRef.value?.next?.()
+        }, 800)
+      }
+    } else {
+      // 只是网络问题
+      showToast('网络开小差了，请重试')
+    }
+  } catch (err) {
+    console.error('校验视频存在性失败', err)
+    showToast('网络异常，请稍后重试')
+  }
+}
 
 // ── Like ──────────────────────────────────────────────
 const handleLike = async (work) => {

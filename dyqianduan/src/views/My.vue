@@ -106,6 +106,15 @@
 
     <div class="tab-content">
       <div v-if="activeTab === 'works'" class="works-grid">
+        <!-- 发布按钮：放在最前面，用户一眼就能看到 -->
+        <div class="work-card upload-card" v-if="userStore.isLoggedIn" @click="$router.push('/upload')">
+          <div class="upload-placeholder">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="#555">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            <span class="upload-text">发布作品</span>
+          </div>
+        </div>
         <div 
           v-for="work in myWorks" 
           :key="work.id"
@@ -136,14 +145,6 @@
               </svg>
               {{ formatCount(work.likesCount) }}
             </div>
-          </div>
-        </div>
-        <div class="work-card upload-card" v-if="userStore.isLoggedIn" @click="$router.push('/upload')">
-          <div class="upload-placeholder">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="#555">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            <span class="upload-text">发布作品</span>
           </div>
         </div>
         <div v-if="myWorks.length === 0 && !userStore.isLoggedIn && !worksLoading" class="empty-state">

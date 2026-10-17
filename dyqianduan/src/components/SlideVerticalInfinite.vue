@@ -456,7 +456,9 @@ defineExpose({
   switchToIndex,
   playCurrentVideo,
   pauseCurrentVideo,
-  stopCurrentVideo
+  stopCurrentVideo,
+  // 滑到下一条（用于视频失效自动跳过）
+  next: () => switchToIndex(currentIndex.value + 1)
 })
 </script>
 
